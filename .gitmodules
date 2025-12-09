@@ -1,0 +1,3 @@
+[submodule "docs/ccu-jack"]
+	path = docs/ccu-jack
+	url = https://github.com/mdzio/ccu-jack.git
