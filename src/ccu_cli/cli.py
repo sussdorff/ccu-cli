@@ -52,14 +52,17 @@ def devices() -> None:
     with get_client() as client:
         try:
             devices = client.list_devices()
+            # Filter out navigation links
+            devices = [d for d in devices if d.get("rel") == "device"]
+
             table = Table(title="Devices")
             table.add_column("Serial", style="cyan")
-            table.add_column("Link", style="dim")
+            table.add_column("Name", style="green")
 
             for device in devices:
-                href = device.get("href", "")
-                serial = href.strip("/").split("/")[-1] if href else ""
-                table.add_row(serial, href)
+                serial = device.get("href", "")
+                name = device.get("title", "")
+                table.add_row(serial, name)
 
             console.print(table)
         except Exception as e:
@@ -156,14 +159,17 @@ def sysvars() -> None:
     with get_client() as client:
         try:
             sysvars = client.list_sysvars()
+            # Filter out navigation links
+            sysvars = [s for s in sysvars if s.get("rel") not in ("root", "collection")]
+
             table = Table(title="System Variables")
-            table.add_column("Name", style="cyan")
-            table.add_column("Link", style="dim")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
 
             for sysvar in sysvars:
-                href = sysvar.get("href", "")
-                name = href.strip("/").split("/")[-1] if href else ""
-                table.add_row(name, href)
+                sysvar_id = sysvar.get("href", "")
+                name = sysvar.get("title", "")
+                table.add_row(sysvar_id, name)
 
             console.print(table)
         except Exception as e:
@@ -177,14 +183,17 @@ def programs() -> None:
     with get_client() as client:
         try:
             programs = client.list_programs()
+            # Filter out navigation links
+            programs = [p for p in programs if p.get("rel") not in ("root", "collection")]
+
             table = Table(title="Programs")
-            table.add_column("Name", style="cyan")
-            table.add_column("Link", style="dim")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
 
             for program in programs:
-                href = program.get("href", "")
-                name = href.strip("/").split("/")[-1] if href else ""
-                table.add_row(name, href)
+                program_id = program.get("href", "")
+                name = program.get("title", "")
+                table.add_row(program_id, name)
 
             console.print(table)
         except Exception as e:

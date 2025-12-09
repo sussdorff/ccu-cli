@@ -55,12 +55,12 @@ class CCUClient:
 
     def list_devices(self) -> list[dict[str, Any]]:
         """List all devices."""
-        data = self._get("/device/~pv")
-        return data.get("links", [])
+        data = self._get("/device")
+        return data.get("~links", [])
 
     def get_device(self, serial: str) -> dict[str, Any]:
         """Get device details including channels."""
-        return self._get(f"/device/{serial}/~pv")
+        return self._get(f"/device/{serial}")
 
     def get_datapoint(self, serial: str, channel: int, datapoint: str) -> Any:
         """Read a datapoint value."""
@@ -81,8 +81,8 @@ class CCUClient:
 
     def list_sysvars(self) -> list[dict[str, Any]]:
         """List all system variables."""
-        data = self._get("/sysvar/~pv")
-        return data.get("links", [])
+        data = self._get("/sysvar")
+        return data.get("~links", [])
 
     def get_sysvar(self, name: str) -> Any:
         """Get a system variable value."""
@@ -95,8 +95,8 @@ class CCUClient:
 
     def list_programs(self) -> list[dict[str, Any]]:
         """List all programs."""
-        data = self._get("/program/~pv")
-        return data.get("links", [])
+        data = self._get("/program")
+        return data.get("~links", [])
 
     def run_program(self, name: str) -> None:
         """Execute a program."""
