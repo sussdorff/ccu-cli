@@ -9,6 +9,7 @@ from rich.table import Table
 
 from .client import CCUClient
 from .config import load_config
+from .rega import ReGaClient, ReGaError, RoomDevice
 
 console = Console()
 error_console = Console(stderr=True)
@@ -18,6 +19,12 @@ def get_client() -> CCUClient:
     """Create a CCU client with loaded configuration."""
     config = load_config()
     return CCUClient(config)
+
+
+def get_rega_client() -> ReGaClient:
+    """Create a ReGa client with loaded configuration."""
+    config = load_config()
+    return ReGaClient(config)
 
 
 def print_json(data: Any) -> None:
@@ -242,7 +249,7 @@ def refresh() -> None:
 
 @main.command()
 def rooms() -> None:
-    """List all rooms."""
+    """List all rooms (via CCU-Jack)."""
     with get_client() as client:
         try:
             rooms = client.list_rooms()
@@ -264,10 +271,16 @@ def rooms() -> None:
             sys.exit(1)
 
 
-@main.command()
+@main.group()
+def room() -> None:
+    """Manage CCU rooms."""
+    pass
+
+
+@room.command("show")
 @click.argument("id_or_name")
-def room(id_or_name: str) -> None:
-    """Show room details.
+def room_show(id_or_name: str) -> None:
+    """Show room details (via CCU-Jack).
 
     ID_OR_NAME can be a room ID (numeric) or the room name.
     """
@@ -275,6 +288,135 @@ def room(id_or_name: str) -> None:
         try:
             data = client.get_room(id_or_name)
             print_json(data)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("create")
+@click.argument("name")
+def room_create(name: str) -> None:
+    """Create a new room."""
+    with get_rega_client() as client:
+        try:
+            room_id = client.create_room(name)
+            console.print(f"[green]OK[/green] Created room '{name}' with ID {room_id}")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("rename")
+@click.argument("room_id", type=int)
+@click.argument("new_name")
+def room_rename(room_id: int, new_name: str) -> None:
+    """Rename an existing room."""
+    with get_rega_client() as client:
+        try:
+            client.rename_room(room_id, new_name)
+            console.print(f"[green]OK[/green] Renamed room {room_id} to '{new_name}'")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("delete")
+@click.argument("room_id", type=int)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def room_delete(room_id: int, yes: bool) -> None:
+    """Delete a room."""
+    if not yes:
+        if not click.confirm(f"Are you sure you want to delete room {room_id}?"):
+            console.print("Cancelled")
+            return
+
+    with get_rega_client() as client:
+        try:
+            client.delete_room(room_id)
+            console.print(f"[green]OK[/green] Deleted room {room_id}")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("add-device")
+@click.argument("room_id", type=int)
+@click.argument("channel_id", type=int)
+def room_add_device(room_id: int, channel_id: int) -> None:
+    """Add a device/channel to a room.
+
+    ROOM_ID: The room's internal ID
+    CHANNEL_ID: The channel's internal ID
+    """
+    with get_rega_client() as client:
+        try:
+            client.add_device_to_room(room_id, channel_id)
+            console.print(f"[green]OK[/green] Added channel {channel_id} to room {room_id}")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("remove-device")
+@click.argument("room_id", type=int)
+@click.argument("channel_id", type=int)
+def room_remove_device(room_id: int, channel_id: int) -> None:
+    """Remove a device/channel from a room.
+
+    ROOM_ID: The room's internal ID
+    CHANNEL_ID: The channel's internal ID
+    """
+    with get_rega_client() as client:
+        try:
+            client.remove_device_from_room(room_id, channel_id)
+            console.print(f"[green]OK[/green] Removed channel {channel_id} from room {room_id}")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("devices")
+@click.argument("room_id", type=int)
+def room_devices(room_id: int) -> None:
+    """List devices/channels in a room.
+
+    ROOM_ID: The room's internal ID
+    """
+    with get_rega_client() as client:
+        try:
+            devices = client.list_room_devices(room_id)
+
+            if not devices:
+                console.print("No devices in this room.")
+                return
+
+            table = Table(title=f"Devices in Room {room_id}")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Address", style="yellow")
+
+            for device in devices:
+                table.add_row(str(device.id), device.name, device.address)
+
+            console.print(table)
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
