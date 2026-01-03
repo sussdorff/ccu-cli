@@ -9,7 +9,7 @@ from rich.table import Table
 
 from .client import CCUClient
 from .config import load_config
-from .rega import ReGaClient, ReGaError, RoomDevice
+from .rega import Program, ReGaClient, ReGaError, RoomDevice
 
 console = Console()
 error_console = Console(stderr=True)
@@ -205,38 +205,254 @@ def sysvars() -> None:
             sys.exit(1)
 
 
-@main.command()
-def programs() -> None:
+@main.group()
+def program() -> None:
+    """Manage CCU programs."""
+    pass
+
+
+def _format_timestamp(ts: int) -> str:
+    """Format Unix timestamp for display."""
+    if ts == 0:
+        return "Never"
+    from datetime import datetime
+
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _resolve_program_id(client: ReGaClient, id_or_name: str) -> tuple[int, Program]:
+    """Resolve a program ID or name to ID and Program object.
+
+    Args:
+        client: ReGa client
+        id_or_name: Program ID (numeric) or name
+
+    Returns:
+        Tuple of (program_id, Program)
+
+    Raises:
+        ReGaError: If program not found
+    """
+    # Try as ID first
+    try:
+        program_id = int(id_or_name)
+        prg = client.get_program(program_id)
+        if prg:
+            return program_id, prg
+    except ValueError:
+        pass
+
+    # Try as name
+    prg = client.get_program_by_name(id_or_name)
+    if prg:
+        return prg.id, prg
+
+    raise ReGaError(f"Program not found: {id_or_name}")
+
+
+@program.command("list")
+def program_list() -> None:
     """List all programs."""
-    with get_client() as client:
+    with get_rega_client() as client:
         try:
             programs = client.list_programs()
-            # Filter out navigation links
-            programs = [p for p in programs if p.get("rel") not in ("root", "collection")]
 
             table = Table(title="Programs")
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="green")
+            table.add_column("Active", style="yellow")
+            table.add_column("Last Executed", style="magenta")
 
-            for program in programs:
-                program_id = program.get("href", "")
-                name = program.get("title", "")
-                table.add_row(program_id, name)
+            for prg in programs:
+                active_str = "✓" if prg.active else "✗"
+                table.add_row(
+                    str(prg.id),
+                    prg.name,
+                    active_str,
+                    _format_timestamp(prg.last_execute_time),
+                )
 
             console.print(table)
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
 
-@main.command()
+@program.command("show")
+@click.argument("id_or_name")
+def program_show(id_or_name: str) -> None:
+    """Show program details.
+
+    ID_OR_NAME can be a program ID (numeric) or the program name.
+    """
+    with get_rega_client() as client:
+        try:
+            _, prg = _resolve_program_id(client, id_or_name)
+
+            table = Table(title=f"Program: {prg.name}")
+            table.add_column("Property", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("ID", str(prg.id))
+            table.add_row("Name", prg.name)
+            table.add_row("Description", prg.description or "(none)")
+            table.add_row("Active", "Yes" if prg.active else "No")
+            table.add_row("Visible", "Yes" if prg.visible else "No")
+            table.add_row("Last Executed", _format_timestamp(prg.last_execute_time))
+
+            console.print(table)
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@program.command("run")
+@click.argument("id_or_name")
+def program_run(id_or_name: str) -> None:
+    """Execute a program.
+
+    ID_OR_NAME can be a program ID (numeric) or the program name.
+    """
+    with get_rega_client() as client:
+        try:
+            program_id, prg = _resolve_program_id(client, id_or_name)
+            client.run_program(program_id)
+            console.print(f"[green]OK[/green] Program '{prg.name}' executed")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@program.command("delete")
+@click.argument("id_or_name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def program_delete(id_or_name: str, yes: bool) -> None:
+    """Delete a program.
+
+    ID_OR_NAME can be a program ID (numeric) or the program name.
+    """
+    with get_rega_client() as client:
+        try:
+            program_id, prg = _resolve_program_id(client, id_or_name)
+
+            if not yes:
+                if not click.confirm(
+                    f"Are you sure you want to delete program '{prg.name}' (ID: {program_id})?"
+                ):
+                    console.print("Cancelled")
+                    return
+
+            client.delete_program(program_id)
+            console.print(f"[green]OK[/green] Deleted program '{prg.name}'")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@program.command("enable")
+@click.argument("id_or_name")
+def program_enable(id_or_name: str) -> None:
+    """Enable a program.
+
+    ID_OR_NAME can be a program ID (numeric) or the program name.
+    """
+    with get_rega_client() as client:
+        try:
+            program_id, prg = _resolve_program_id(client, id_or_name)
+            client.set_program_active(program_id, True)
+            console.print(f"[green]OK[/green] Program '{prg.name}' enabled")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@program.command("disable")
+@click.argument("id_or_name")
+def program_disable(id_or_name: str) -> None:
+    """Disable a program.
+
+    ID_OR_NAME can be a program ID (numeric) or the program name.
+    """
+    with get_rega_client() as client:
+        try:
+            program_id, prg = _resolve_program_id(client, id_or_name)
+            client.set_program_active(program_id, False)
+            console.print(f"[green]OK[/green] Program '{prg.name}' disabled")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# Legacy commands for backwards compatibility
+@main.command(deprecated=True, hidden=True)
+def programs() -> None:
+    """List all programs. (deprecated: use 'program list')"""
+    with get_rega_client() as client:
+        try:
+            prgs = client.list_programs()
+
+            table = Table(title="Programs")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Active", style="yellow")
+            table.add_column("Last Executed", style="magenta")
+
+            for prg in prgs:
+                active_str = "✓" if prg.active else "✗"
+                table.add_row(
+                    str(prg.id),
+                    prg.name,
+                    active_str,
+                    _format_timestamp(prg.last_execute_time),
+                )
+
+            console.print(table)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu programs' is deprecated. Use 'ccu program list' instead."
+            )
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
 @click.argument("name")
 def run(name: str) -> None:
-    """Execute a program by name."""
-    with get_client() as client:
+    """Execute a program by name. (deprecated: use 'program run')"""
+    with get_rega_client() as client:
         try:
-            client.run_program(name)
+            prg = client.get_program_by_name(name)
+            if not prg:
+                raise ReGaError(f"Program not found: {name}")
+            client.run_program(prg.id)
             console.print(f"[green]OK[/green] Program '{name}' executed")
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu run' is deprecated. Use 'ccu program run' instead."
+            )
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
