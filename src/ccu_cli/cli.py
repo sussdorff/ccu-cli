@@ -10,6 +10,7 @@ from rich.table import Table
 from .client import CCUClient
 from .config import load_config
 from .rega import Program, ReGaClient, ReGaError, RoomDevice
+from .xmlrpc import XMLRPCClient, XMLRPCError
 
 console = Console()
 error_console = Console(stderr=True)
@@ -25,6 +26,12 @@ def get_rega_client() -> ReGaClient:
     """Create a ReGa client with loaded configuration."""
     config = load_config()
     return ReGaClient(config)
+
+
+def get_xmlrpc_client(interface: str = "HmIP-RF") -> XMLRPCClient:
+    """Create an XML-RPC client with loaded configuration."""
+    config = load_config()
+    return XMLRPCClient(config, interface)
 
 
 def print_json(data: Any) -> None:
@@ -652,6 +659,229 @@ def room_devices(room_id: int) -> None:
 
             console.print(table)
         except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.group()
+def link() -> None:
+    """Manage device links (Direktverknüpfungen) via XML-RPC."""
+    pass
+
+
+@link.command("list")
+@click.option(
+    "--address",
+    "-a",
+    help="Filter by device/channel address (e.g., 000B5D89B014D8:1)",
+)
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_list(address: str | None, interface: str) -> None:
+    """List device links (Direktverknüpfungen)."""
+    with get_xmlrpc_client(interface) as client:
+        try:
+            links = client.get_links(address)
+
+            if not links:
+                console.print("No links found.")
+                return
+
+            table = Table(title="Device Links")
+            table.add_column("Sender", style="cyan")
+            table.add_column("Receiver", style="green")
+            table.add_column("Name", style="yellow")
+            table.add_column("Description", style="magenta")
+
+            for lnk in links:
+                table.add_row(lnk.sender, lnk.receiver, lnk.name, lnk.description)
+
+            console.print(table)
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.command("peers")
+@click.argument("address")
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_peers(address: str, interface: str) -> None:
+    """List link peers for a channel.
+
+    ADDRESS: Channel address (e.g., 000B5D89B014D8:1)
+    """
+    with get_xmlrpc_client(interface) as client:
+        try:
+            peers = client.get_link_peers(address)
+
+            if not peers:
+                console.print(f"No link peers for {address}")
+                return
+
+            table = Table(title=f"Link Peers for {address}")
+            table.add_column("Peer Address", style="cyan")
+
+            for peer in peers:
+                table.add_row(peer)
+
+            console.print(table)
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.command("add")
+@click.argument("sender")
+@click.argument("receiver")
+@click.option("--name", "-n", default="", help="Link name")
+@click.option("--description", "-d", default="", help="Link description")
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_add(
+    sender: str, receiver: str, name: str, description: str, interface: str
+) -> None:
+    """Create a device link (Direktverknüpfung).
+
+    SENDER: Sender channel address (e.g., 000B5D89B014D8:1)
+    RECEIVER: Receiver channel address (e.g., 000E9569A23B4C:4)
+    """
+    with get_xmlrpc_client(interface) as client:
+        try:
+            client.add_link(sender, receiver, name, description)
+            console.print(
+                f"[green]OK[/green] Created link: {sender} -> {receiver}"
+            )
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.command("remove")
+@click.argument("sender")
+@click.argument("receiver")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_remove(sender: str, receiver: str, yes: bool, interface: str) -> None:
+    """Remove a device link.
+
+    SENDER: Sender channel address
+    RECEIVER: Receiver channel address
+    """
+    if not yes:
+        if not click.confirm(f"Remove link {sender} -> {receiver}?"):
+            console.print("Cancelled")
+            return
+
+    with get_xmlrpc_client(interface) as client:
+        try:
+            client.remove_link(sender, receiver)
+            console.print(f"[green]OK[/green] Removed link: {sender} -> {receiver}")
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.command("info")
+@click.argument("sender")
+@click.argument("receiver")
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_info(sender: str, receiver: str, interface: str) -> None:
+    """Show link details.
+
+    SENDER: Sender channel address
+    RECEIVER: Receiver channel address
+    """
+    with get_xmlrpc_client(interface) as client:
+        try:
+            info = client.get_link_info(sender, receiver)
+
+            if not info:
+                error_console.print(f"[red]Link not found:[/red] {sender} -> {receiver}")
+                sys.exit(1)
+
+            table = Table(title=f"Link: {sender} -> {receiver}")
+            table.add_column("Property", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Sender", info.sender)
+            table.add_row("Receiver", info.receiver)
+            table.add_row("Name", info.name or "(none)")
+            table.add_row("Description", info.description or "(none)")
+            table.add_row("Flags", str(info.flags))
+
+            console.print(table)
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.command("params")
+@click.argument("sender")
+@click.argument("receiver")
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_params(sender: str, receiver: str, interface: str) -> None:
+    """Show link parameters (LINK paramset).
+
+    SENDER: Sender channel address
+    RECEIVER: Receiver channel address
+    """
+    with get_xmlrpc_client(interface) as client:
+        try:
+            params = client.get_link_paramset(sender, receiver)
+            print_json(params)
+        except XMLRPCError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
