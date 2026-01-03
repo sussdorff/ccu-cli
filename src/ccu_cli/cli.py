@@ -91,6 +91,27 @@ def device(serial: str) -> None:
 
 
 @main.command()
+@click.argument("channel_id", type=int)
+@click.argument("new_name")
+def rename(channel_id: int, new_name: str) -> None:
+    """Rename a channel/device.
+
+    CHANNEL_ID: The channel's internal ID
+    NEW_NAME: New name for the channel
+    """
+    with get_rega_client() as client:
+        try:
+            client.rename_channel(channel_id, new_name)
+            console.print(f"[green]OK[/green] Renamed channel {channel_id} to '{new_name}'")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command()
 @click.argument("path")
 def get(path: str) -> None:
     """Read a datapoint value.

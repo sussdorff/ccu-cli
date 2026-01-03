@@ -188,6 +188,30 @@ foreach(roomId, dom.GetObject(ID_ROOMS).EnumUsedIDs()) {
                     continue
         return rooms
 
+    def rename_channel(self, channel_id: int, new_name: str) -> None:
+        """Rename a channel/device.
+
+        Args:
+            channel_id: The channel's internal ID
+            new_name: New name for the channel
+
+        Raises:
+            ReGaError: If channel not found
+        """
+        script = f"""
+object channel = dom.GetObject({channel_id});
+if (channel) {{
+    channel.Name("{new_name}");
+    WriteLine("OK");
+}} else {{
+    WriteLine("ERROR:Channel not found");
+}}
+"""
+        result = self.execute(script)
+        first_line = result.strip().split("\n")[0].strip()
+        if first_line.startswith("ERROR:"):
+            raise ReGaError(first_line[6:])
+
     def add_device_to_room(self, room_id: int, channel_id: int) -> None:
         """Add a device/channel to a room.
 
