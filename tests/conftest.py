@@ -6,6 +6,7 @@ from httpx import MockTransport, Response
 
 from ccu_cli.config import CCUConfig
 from ccu_cli.client import CCUClient
+from ccu_cli.rega import ReGaClient
 
 
 @pytest.fixture

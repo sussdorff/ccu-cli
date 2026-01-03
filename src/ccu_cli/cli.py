@@ -9,6 +9,7 @@ from rich.table import Table
 
 from .client import CCUClient
 from .config import load_config
+from .rega import ReGaClient, ReGaError
 
 console = Console()
 error_console = Console(stderr=True)
@@ -18,6 +19,12 @@ def get_client() -> CCUClient:
     """Create a CCU client with loaded configuration."""
     config = load_config()
     return CCUClient(config)
+
+
+def get_rega_client() -> ReGaClient:
+    """Create a ReGa client with loaded configuration."""
+    config = load_config()
+    return ReGaClient(config)
 
 
 def print_json(data: Any) -> None:
@@ -235,6 +242,87 @@ def refresh() -> None:
         try:
             client.refresh()
             console.print("[green]OK[/green] CCU-Jack refreshed")
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.group()
+def room() -> None:
+    """Manage CCU rooms."""
+    pass
+
+
+@room.command("list")
+def room_list() -> None:
+    """List all rooms."""
+    with get_rega_client() as client:
+        try:
+            rooms = client.list_rooms()
+
+            table = Table(title="Rooms")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+
+            for r in rooms:
+                table.add_row(str(r["id"]), r["name"])
+
+            console.print(table)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("create")
+@click.argument("name")
+def room_create(name: str) -> None:
+    """Create a new room."""
+    with get_rega_client() as client:
+        try:
+            room_id = client.create_room(name)
+            console.print(f"[green]OK[/green] Created room '{name}' with ID {room_id}")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("rename")
+@click.argument("room_id", type=int)
+@click.argument("new_name")
+def room_rename(room_id: int, new_name: str) -> None:
+    """Rename an existing room."""
+    with get_rega_client() as client:
+        try:
+            client.rename_room(room_id, new_name)
+            console.print(f"[green]OK[/green] Renamed room {room_id} to '{new_name}'")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("delete")
+@click.argument("room_id", type=int)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def room_delete(room_id: int, yes: bool) -> None:
+    """Delete a room."""
+    if not yes:
+        if not click.confirm(f"Are you sure you want to delete room {room_id}?"):
+            console.print("Cancelled")
+            return
+
+    with get_rega_client() as client:
+        try:
+            client.delete_room(room_id)
+            console.print(f"[green]OK[/green] Deleted room {room_id}")
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

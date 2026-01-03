@@ -144,3 +144,131 @@ class TestRunCommand:
         assert result.exit_code == 0
         assert "OK" in result.output
         mock_client_context.run_program.assert_called_once_with("AllLightsOff")
+
+
+@pytest.fixture
+def mock_rega_context(mocker):
+    """Mock get_rega_client to return a controllable mock."""
+    mock = MagicMock()
+    mock.__enter__ = MagicMock(return_value=mock)
+    mock.__exit__ = MagicMock(return_value=False)
+    mocker.patch("ccu_cli.cli.get_rega_client", return_value=mock)
+    return mock
+
+
+class TestRoomListCommand:
+    """Tests for 'ccu room list' command."""
+
+    def test_displays_rooms_table(self, runner, mock_rega_context):
+        """Should display rooms in a table."""
+        mock_rega_context.list_rooms.return_value = [
+            {"id": 1234, "name": "Living Room"},
+            {"id": 5678, "name": "Kitchen"},
+        ]
+
+        result = runner.invoke(main, ["room", "list"])
+
+        assert result.exit_code == 0
+        assert "1234" in result.output
+        assert "Living Room" in result.output
+        assert "5678" in result.output
+        assert "Kitchen" in result.output
+
+    def test_handles_empty_room_list(self, runner, mock_rega_context):
+        """Should display empty table when no rooms exist."""
+        mock_rega_context.list_rooms.return_value = []
+
+        result = runner.invoke(main, ["room", "list"])
+
+        assert result.exit_code == 0
+        assert "Rooms" in result.output  # Table title still shown
+
+
+class TestRoomCreateCommand:
+    """Tests for 'ccu room create' command."""
+
+    def test_creates_room(self, runner, mock_rega_context):
+        """Should create room and display success message."""
+        mock_rega_context.create_room.return_value = 1234
+
+        result = runner.invoke(main, ["room", "create", "Living Room"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "Living Room" in result.output
+        assert "1234" in result.output
+        mock_rega_context.create_room.assert_called_once_with("Living Room")
+
+    def test_handles_error(self, runner, mock_rega_context):
+        """Should display error message on failure."""
+        from ccu_cli.rega import ReGaError
+
+        mock_rega_context.create_room.side_effect = ReGaError("Script failed")
+
+        result = runner.invoke(main, ["room", "create", "Test Room"])
+
+        assert result.exit_code != 0
+        assert "Error" in result.output
+
+
+class TestRoomRenameCommand:
+    """Tests for 'ccu room rename' command."""
+
+    def test_renames_room(self, runner, mock_rega_context):
+        """Should rename room and display success message."""
+        result = runner.invoke(main, ["room", "rename", "1234", "New Name"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "New Name" in result.output
+        mock_rega_context.rename_room.assert_called_once_with(1234, "New Name")
+
+    def test_handles_room_not_found(self, runner, mock_rega_context):
+        """Should display error if room not found."""
+        from ccu_cli.rega import ReGaError
+
+        mock_rega_context.rename_room.side_effect = ReGaError("Room not found")
+
+        result = runner.invoke(main, ["room", "rename", "9999", "New Name"])
+
+        assert result.exit_code != 0
+        assert "Room not found" in result.output
+
+
+class TestRoomDeleteCommand:
+    """Tests for 'ccu room delete' command."""
+
+    def test_deletes_room_with_confirmation(self, runner, mock_rega_context):
+        """Should delete room after confirmation."""
+        result = runner.invoke(main, ["room", "delete", "1234"], input="y\n")
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_rega_context.delete_room.assert_called_once_with(1234)
+
+    def test_cancels_without_confirmation(self, runner, mock_rega_context):
+        """Should not delete room if confirmation declined."""
+        result = runner.invoke(main, ["room", "delete", "1234"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        mock_rega_context.delete_room.assert_not_called()
+
+    def test_deletes_with_yes_flag(self, runner, mock_rega_context):
+        """Should delete room without confirmation if --yes flag used."""
+        result = runner.invoke(main, ["room", "delete", "--yes", "1234"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_rega_context.delete_room.assert_called_once_with(1234)
+
+    def test_handles_room_not_found(self, runner, mock_rega_context):
+        """Should display error if room not found."""
+        from ccu_cli.rega import ReGaError
+
+        mock_rega_context.delete_room.side_effect = ReGaError("Room not found")
+
+        result = runner.invoke(main, ["room", "delete", "--yes", "9999"])
+
+        assert result.exit_code != 0
+        assert "Room not found" in result.output
