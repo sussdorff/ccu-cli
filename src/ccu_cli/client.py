@@ -101,3 +101,7 @@ class CCUClient:
     def run_program(self, name: str) -> None:
         """Execute a program."""
         self._put(f"/program/{name}/~pv", {"v": True})
+
+    def refresh(self) -> None:
+        """Trigger CCU-Jack to reload device/channel data from CCU."""
+        self._put("/~vendor/refresh/~pv", {"v": True})

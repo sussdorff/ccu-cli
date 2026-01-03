@@ -228,5 +228,17 @@ def config(serial: str, channel: int) -> None:
             sys.exit(1)
 
 
+@main.command()
+def refresh() -> None:
+    """Reload device data from CCU."""
+    with get_client() as client:
+        try:
+            client.refresh()
+            console.print("[green]OK[/green] CCU-Jack refreshed")
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
 if __name__ == "__main__":
     main()
