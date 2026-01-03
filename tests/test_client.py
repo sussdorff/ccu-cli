@@ -118,3 +118,86 @@ class TestListPrograms:
         program_titles = [p["title"] for p in programs if p.get("rel") == "program"]
         assert "All Lights Off" in program_titles
         assert "Good Night" in program_titles
+
+
+class TestListRooms:
+    """Tests for CCUClient.list_rooms()."""
+
+    def test_returns_room_links(self, mock_client, rooms_response):
+        """Should return list of room links from response."""
+
+        def handler(request):
+            assert request.url.path == "/room"
+            return Response(200, json=rooms_response)
+
+        client = mock_client(handler)
+        rooms = client.list_rooms()
+
+        assert len(rooms) == 3
+        room_titles = [r["title"] for r in rooms if r.get("rel") == "room"]
+        assert "Living Room" in room_titles
+        assert "Kitchen" in room_titles
+
+    def test_handles_empty_response(self, mock_client):
+        """Should handle empty room list."""
+
+        def handler(request):
+            return Response(200, json={"~links": []})
+
+        client = mock_client(handler)
+        rooms = client.list_rooms()
+
+        assert rooms == []
+
+
+class TestGetRoom:
+    """Tests for CCUClient.get_room()."""
+
+    def test_gets_room_by_id(self, mock_client, room_detail_response):
+        """Should fetch room details by ID."""
+
+        def handler(request):
+            assert request.url.path == "/room/1234"
+            return Response(200, json=room_detail_response)
+
+        client = mock_client(handler)
+        room = client.get_room("1234")
+
+        assert room["identifier"] == "1234"
+        assert room["title"] == "Living Room"
+
+    def test_gets_room_by_name(self, mock_client, rooms_response, room_detail_response):
+        """Should lookup room by name and fetch details."""
+        call_count = {"value": 0}
+
+        def handler(request):
+            call_count["value"] += 1
+            if request.url.path == "/room/Living%20Room":
+                # First call with name fails (room names are not valid paths)
+                return Response(404)
+            elif request.url.path == "/room":
+                return Response(200, json=rooms_response)
+            elif request.url.path == "/room/1234":
+                return Response(200, json=room_detail_response)
+            return Response(404)
+
+        client = mock_client(handler)
+        room = client.get_room("Living Room")
+
+        assert room["identifier"] == "1234"
+        assert room["title"] == "Living Room"
+
+    def test_raises_for_unknown_room(self, mock_client, rooms_response):
+        """Should raise ValueError for unknown room name."""
+
+        def handler(request):
+            if request.url.path == "/room/Unknown%20Room":
+                return Response(404)
+            elif request.url.path == "/room":
+                return Response(200, json=rooms_response)
+            return Response(404)
+
+        client = mock_client(handler)
+
+        with pytest.raises(ValueError, match="Room not found: Unknown Room"):
+            client.get_room("Unknown Room")

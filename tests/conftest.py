@@ -80,3 +80,32 @@ def programs_response() -> dict:
             {"rel": "program", "href": "9002", "title": "Good Night"},
         ],
     }
+
+
+@pytest.fixture
+def rooms_response() -> dict:
+    """Sample /room endpoint response."""
+    return {
+        "identifier": "room",
+        "title": "Rooms",
+        "~links": [
+            {"rel": "root", "href": "..", "title": "Root"},
+            {"rel": "room", "href": "1234", "title": "Living Room"},
+            {"rel": "room", "href": "5678", "title": "Kitchen"},
+        ],
+    }
+
+
+@pytest.fixture
+def room_detail_response() -> dict:
+    """Sample /room/<id> endpoint response."""
+    return {
+        "identifier": "1234",
+        "title": "Living Room",
+        "description": "",
+        "~links": [
+            {"rel": "root", "href": "..", "title": "Root"},
+            {"rel": "channel", "href": "NEQ0123456/1", "title": "Light Switch"},
+            {"rel": "channel", "href": "NEQ0789012/0", "title": "Thermostat"},
+        ],
+    }

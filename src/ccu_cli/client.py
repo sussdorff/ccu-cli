@@ -105,3 +105,36 @@ class CCUClient:
     def refresh(self) -> None:
         """Trigger CCU-Jack to reload device/channel data from CCU."""
         self._put("/~vendor/refresh/~pv", {"v": True})
+
+    def list_rooms(self) -> list[dict[str, Any]]:
+        """List all rooms."""
+        data = self._get("/room")
+        return data.get("~links", [])
+
+    def get_room(self, id_or_name: str) -> dict[str, Any]:
+        """Get room details by ID or name.
+
+        Args:
+            id_or_name: Room ID (numeric) or room name.
+
+        Returns:
+            Room details including channels/devices.
+
+        Raises:
+            httpx.HTTPStatusError: If room not found.
+            ValueError: If name lookup fails.
+        """
+        # First try direct ID lookup
+        try:
+            return self._get(f"/room/{id_or_name}")
+        except Exception:
+            pass
+
+        # If that fails, try name lookup
+        rooms = self.list_rooms()
+        for room in rooms:
+            if room.get("rel") == "room" and room.get("title") == id_or_name:
+                room_id = room.get("href", "")
+                return self._get(f"/room/{room_id}")
+
+        raise ValueError(f"Room not found: {id_or_name}")

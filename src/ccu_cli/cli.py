@@ -240,5 +240,45 @@ def refresh() -> None:
             sys.exit(1)
 
 
+@main.command()
+def rooms() -> None:
+    """List all rooms."""
+    with get_client() as client:
+        try:
+            rooms = client.list_rooms()
+            # Filter out navigation links
+            rooms = [r for r in rooms if r.get("rel") == "room"]
+
+            table = Table(title="Rooms")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+
+            for room in rooms:
+                room_id = room.get("href", "")
+                name = room.get("title", "")
+                table.add_row(room_id, name)
+
+            console.print(table)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command()
+@click.argument("id_or_name")
+def room(id_or_name: str) -> None:
+    """Show room details.
+
+    ID_OR_NAME can be a room ID (numeric) or the room name.
+    """
+    with get_client() as client:
+        try:
+            data = client.get_room(id_or_name)
+            print_json(data)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
 if __name__ == "__main__":
     main()
