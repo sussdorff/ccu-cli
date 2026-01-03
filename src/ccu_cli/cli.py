@@ -9,6 +9,7 @@ from rich.table import Table
 
 from .client import CCUClient
 from .config import load_config
+from .rega import ReGaClient
 
 console = Console()
 error_console = Console(stderr=True)
@@ -18,6 +19,12 @@ def get_client() -> CCUClient:
     """Create a CCU client with loaded configuration."""
     config = load_config()
     return CCUClient(config)
+
+
+def get_rega_client() -> ReGaClient:
+    """Create a ReGa client with loaded configuration."""
+    config = load_config()
+    return ReGaClient(config)
 
 
 def print_json(data: Any) -> None:
@@ -235,6 +242,77 @@ def refresh() -> None:
         try:
             client.refresh()
             console.print("[green]OK[/green] CCU-Jack refreshed")
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.group()
+def room() -> None:
+    """Manage room-device assignments."""
+    pass
+
+
+@room.command("add-device")
+@click.argument("room_id", type=int)
+@click.argument("channel_id", type=int)
+def room_add_device(room_id: int, channel_id: int) -> None:
+    """Add a device/channel to a room.
+
+    ROOM_ID: The room's internal ID
+    CHANNEL_ID: The channel's internal ID
+    """
+    with get_rega_client() as client:
+        try:
+            client.add_device_to_room(room_id, channel_id)
+            console.print(f"[green]OK[/green] Added channel {channel_id} to room {room_id}")
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("remove-device")
+@click.argument("room_id", type=int)
+@click.argument("channel_id", type=int)
+def room_remove_device(room_id: int, channel_id: int) -> None:
+    """Remove a device/channel from a room.
+
+    ROOM_ID: The room's internal ID
+    CHANNEL_ID: The channel's internal ID
+    """
+    with get_rega_client() as client:
+        try:
+            client.remove_device_from_room(room_id, channel_id)
+            console.print(f"[green]OK[/green] Removed channel {channel_id} from room {room_id}")
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("devices")
+@click.argument("room_id", type=int)
+def room_devices(room_id: int) -> None:
+    """List devices/channels in a room.
+
+    ROOM_ID: The room's internal ID
+    """
+    with get_rega_client() as client:
+        try:
+            devices = client.list_room_devices(room_id)
+
+            if not devices:
+                console.print("No devices in this room.")
+                return
+
+            table = Table(title=f"Devices in Room {room_id}")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Address", style="yellow")
+
+            for device in devices:
+                table.add_row(str(device.id), device.name, device.address)
+
+            console.print(table)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

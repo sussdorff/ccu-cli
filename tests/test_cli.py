@@ -5,6 +5,7 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock
 
 from ccu_cli.cli import main
+from ccu_cli.rega import RoomDevice
 
 
 @pytest.fixture
@@ -20,6 +21,16 @@ def mock_client_context(mocker):
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=False)
     mocker.patch("ccu_cli.cli.get_client", return_value=mock)
+    return mock
+
+
+@pytest.fixture
+def mock_rega_client_context(mocker):
+    """Mock get_rega_client to return a controllable mock."""
+    mock = MagicMock()
+    mock.__enter__ = MagicMock(return_value=mock)
+    mock.__exit__ = MagicMock(return_value=False)
+    mocker.patch("ccu_cli.cli.get_rega_client", return_value=mock)
     return mock
 
 
@@ -144,3 +155,89 @@ class TestRunCommand:
         assert result.exit_code == 0
         assert "OK" in result.output
         mock_client_context.run_program.assert_called_once_with("AllLightsOff")
+
+
+class TestRoomAddDeviceCommand:
+    """Tests for 'ccu room add-device' command."""
+
+    def test_adds_device_to_room(self, runner, mock_rega_client_context):
+        """Should call add_device_to_room with correct IDs."""
+        result = runner.invoke(main, ["room", "add-device", "1234", "5678"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "5678" in result.output
+        assert "1234" in result.output
+        mock_rega_client_context.add_device_to_room.assert_called_once_with(1234, 5678)
+
+    def test_handles_error(self, runner, mock_rega_client_context):
+        """Should display error message on failure."""
+        mock_rega_client_context.add_device_to_room.side_effect = ValueError("Room not found")
+
+        result = runner.invoke(main, ["room", "add-device", "9999", "5678"])
+
+        assert result.exit_code != 0
+        assert "Error" in result.output
+        assert "Room not found" in result.output
+
+
+class TestRoomRemoveDeviceCommand:
+    """Tests for 'ccu room remove-device' command."""
+
+    def test_removes_device_from_room(self, runner, mock_rega_client_context):
+        """Should call remove_device_from_room with correct IDs."""
+        result = runner.invoke(main, ["room", "remove-device", "1234", "5678"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "Removed" in result.output
+        mock_rega_client_context.remove_device_from_room.assert_called_once_with(1234, 5678)
+
+    def test_handles_error(self, runner, mock_rega_client_context):
+        """Should display error message on failure."""
+        mock_rega_client_context.remove_device_from_room.side_effect = ValueError("Channel not found")
+
+        result = runner.invoke(main, ["room", "remove-device", "1234", "9999"])
+
+        assert result.exit_code != 0
+        assert "Error" in result.output
+        assert "Channel not found" in result.output
+
+
+class TestRoomDevicesCommand:
+    """Tests for 'ccu room devices' command."""
+
+    def test_displays_devices_table(self, runner, mock_rega_client_context):
+        """Should display devices in a table."""
+        mock_rega_client_context.list_room_devices.return_value = [
+            RoomDevice(id=1001, name="Living Room Light", address="ABC123:1"),
+            RoomDevice(id=1002, name="Living Room Switch", address="DEF456:2"),
+        ]
+
+        result = runner.invoke(main, ["room", "devices", "1234"])
+
+        assert result.exit_code == 0
+        assert "1001" in result.output
+        assert "Living Room Light" in result.output
+        assert "ABC123:1" in result.output
+        assert "1002" in result.output
+        mock_rega_client_context.list_room_devices.assert_called_once_with(1234)
+
+    def test_displays_empty_message(self, runner, mock_rega_client_context):
+        """Should display message when room has no devices."""
+        mock_rega_client_context.list_room_devices.return_value = []
+
+        result = runner.invoke(main, ["room", "devices", "1234"])
+
+        assert result.exit_code == 0
+        assert "No devices" in result.output
+
+    def test_handles_error(self, runner, mock_rega_client_context):
+        """Should display error message on failure."""
+        mock_rega_client_context.list_room_devices.side_effect = ValueError("Room not found")
+
+        result = runner.invoke(main, ["room", "devices", "9999"])
+
+        assert result.exit_code != 0
+        assert "Error" in result.output
+        assert "Room not found" in result.output
