@@ -156,17 +156,17 @@ def mock_rega_context(mocker):
     return mock
 
 
-class TestRoomListCommand:
-    """Tests for 'ccu room list' command."""
+class TestRoomsCommand:
+    """Tests for 'ccu rooms' command (via CCU-Jack)."""
 
-    def test_displays_rooms_table(self, runner, mock_rega_context):
+    def test_displays_rooms_table(self, runner, mock_client_context):
         """Should display rooms in a table."""
-        mock_rega_context.list_rooms.return_value = [
-            {"id": 1234, "name": "Living Room"},
-            {"id": 5678, "name": "Kitchen"},
+        mock_client_context.list_rooms.return_value = [
+            {"rel": "room", "href": "1234", "title": "Living Room"},
+            {"rel": "room", "href": "5678", "title": "Kitchen"},
         ]
 
-        result = runner.invoke(main, ["room", "list"])
+        result = runner.invoke(main, ["rooms"])
 
         assert result.exit_code == 0
         assert "1234" in result.output
@@ -174,11 +174,11 @@ class TestRoomListCommand:
         assert "5678" in result.output
         assert "Kitchen" in result.output
 
-    def test_handles_empty_room_list(self, runner, mock_rega_context):
+    def test_handles_empty_room_list(self, runner, mock_client_context):
         """Should display empty table when no rooms exist."""
-        mock_rega_context.list_rooms.return_value = []
+        mock_client_context.list_rooms.return_value = []
 
-        result = runner.invoke(main, ["room", "list"])
+        result = runner.invoke(main, ["rooms"])
 
         assert result.exit_code == 0
         assert "Rooms" in result.output  # Table title still shown
