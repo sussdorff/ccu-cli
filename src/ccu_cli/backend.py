@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Iterator
 
 from aiohomematic.central import CentralConfig, CentralUnit
-from aiohomematic.const import ParamsetKey
+from aiohomematic.const import Interface, ParamsetKey
 
 from .config import CCUConfig
 from .xmlrpc import DeviceLink, LinkInfo, XMLRPCClient
@@ -486,6 +486,97 @@ class CCUBackend:
             await self.central.hub_coordinator.fetch_sysvar_data()
 
         self._run_async(_refresh())
+
+    # Install mode / Pairing operations
+
+    def get_install_mode(self, interface: Interface) -> int:
+        """Get remaining time in install mode for an interface.
+
+        Args:
+            interface: The interface to check (e.g., Interface.HMIP_RF)
+
+        Returns:
+            Remaining seconds in install mode, 0 if not active
+        """
+
+        async def _get() -> int:
+            return await self.central.get_install_mode(interface=interface)
+
+        return self._run_async(_get())
+
+    def set_install_mode(
+        self,
+        interface: Interface,
+        on: bool = True,
+        time: int = 60,
+        mode: int = 1,
+        device_address: str | None = None,
+    ) -> bool:
+        """Set install mode (pairing mode) on an interface.
+
+        Args:
+            interface: The interface to set install mode on
+            on: True to enable, False to disable
+            time: Duration in seconds (default 60)
+            mode: 1=normal, 2=set all ROAMING devices into install mode
+            device_address: Optional, limit pairing to specific device
+
+        Returns:
+            True if successful
+        """
+
+        async def _set() -> bool:
+            return await self.central.set_install_mode(
+                interface=interface,
+                on=on,
+                time=time,
+                mode=mode,
+                device_address=device_address,
+            )
+
+        return self._run_async(_set())
+
+    # Inbox operations
+
+    def list_inbox_devices(self) -> list[Device]:
+        """List devices waiting in the CCU inbox.
+
+        Returns:
+            List of devices in inbox (not yet accepted)
+        """
+        # Inbox devices are in the device registry but have inbox_pending flag
+        # or can be found via the hub's inbox data points
+        devices = []
+        for dp in self.central.hub_coordinator.inbox_data_points:
+            # Each inbox device has a button data point
+            devices.append(
+                Device(
+                    address=dp.device_address,
+                    name=dp.name or dp.device_address,
+                    model="",  # Not available for inbox devices
+                    interface="",
+                    firmware="",
+                    available=True,
+                )
+            )
+        return devices
+
+    def accept_inbox_device(self, device_address: str) -> bool:
+        """Accept a device from the CCU inbox.
+
+        Args:
+            device_address: Address of the device to accept
+
+        Returns:
+            True if successful
+        """
+
+        async def _accept() -> bool:
+            return await self.central.accept_device_in_inbox(
+                device_address=device_address
+            )
+
+        return self._run_async(_accept())
 
     # Link operations (Direktverknüpfungen)
 

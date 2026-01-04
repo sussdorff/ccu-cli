@@ -1,5 +1,7 @@
 """CLI interface for ccu-cli."""
 
+import json
+import logging
 import sys
 from typing import Any
 
@@ -10,6 +12,9 @@ from rich.table import Table
 from .backend import CCUBackend, BackendError
 from .config import ConfigurationError, load_config
 from .rega import ReGaClient, ReGaError
+
+# Suppress verbose logging from aiohomematic
+logging.getLogger("aiohomematic").setLevel(logging.WARNING)
 
 console = Console()
 error_console = Console(stderr=True)
@@ -243,6 +248,256 @@ def device_refresh() -> None:
         try:
             backend.refresh_data()
             console.print("[green]OK[/green] Data refreshed")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Device Pairing Commands
+# =============================================================================
+
+
+@device.group("pair")
+def device_pair() -> None:
+    """Manage device pairing (install mode)."""
+    pass
+
+
+@device_pair.command("on")
+@click.option(
+    "--time",
+    "-t",
+    default=60,
+    type=int,
+    help="Pairing duration in seconds (default: 60)",
+)
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["hmip", "bidcos", "all"]),
+    default="all",
+    help="Interface to enable pairing on (default: all)",
+)
+@click.option(
+    "--device",
+    "-d",
+    default=None,
+    help="Limit pairing to specific device address",
+)
+def device_pair_on(time: int, interface: str, device: str | None) -> None:
+    """Enable pairing mode (install mode).
+
+    Puts the CCU into pairing mode so new devices can be added.
+    """
+    from aiohomematic.const import Interface
+
+    with get_backend() as backend:
+        try:
+            interfaces_to_enable = []
+            if interface == "hmip" or interface == "all":
+                interfaces_to_enable.append(("HmIP-RF", Interface.HMIP_RF))
+            if interface == "bidcos" or interface == "all":
+                interfaces_to_enable.append(("BidCos-RF", Interface.BIDCOS_RF))
+
+            for name, iface in interfaces_to_enable:
+                success = backend.set_install_mode(
+                    interface=iface,
+                    on=True,
+                    time=time,
+                    device_address=device,
+                )
+                if success:
+                    console.print(f"[green]OK[/green] Pairing enabled on {name} for {time}s")
+                else:
+                    console.print(f"[yellow]Warning:[/yellow] Could not enable pairing on {name}")
+
+            if device:
+                console.print(f"[dim]Limited to device: {device}[/dim]")
+
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@device_pair.command("off")
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["hmip", "bidcos", "all"]),
+    default="all",
+    help="Interface to disable pairing on (default: all)",
+)
+def device_pair_off(interface: str) -> None:
+    """Disable pairing mode."""
+    from aiohomematic.const import Interface
+
+    with get_backend() as backend:
+        try:
+            interfaces_to_disable = []
+            if interface == "hmip" or interface == "all":
+                interfaces_to_disable.append(("HmIP-RF", Interface.HMIP_RF))
+            if interface == "bidcos" or interface == "all":
+                interfaces_to_disable.append(("BidCos-RF", Interface.BIDCOS_RF))
+
+            for name, iface in interfaces_to_disable:
+                backend.set_install_mode(interface=iface, on=False)
+                console.print(f"[green]OK[/green] Pairing disabled on {name}")
+
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@device_pair.command("status")
+def device_pair_status() -> None:
+    """Show pairing mode status."""
+    from aiohomematic.const import Interface
+
+    with get_backend() as backend:
+        try:
+            table = Table(title="Pairing Mode Status")
+            table.add_column("Interface", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Time Remaining", style="yellow")
+
+            interfaces = [
+                ("HmIP-RF", Interface.HMIP_RF),
+                ("BidCos-RF", Interface.BIDCOS_RF),
+            ]
+
+            for name, iface in interfaces:
+                try:
+                    remaining = backend.get_install_mode(iface)
+                    if remaining > 0:
+                        status = "[green]Active[/green]"
+                        time_str = f"{remaining}s"
+                    else:
+                        status = "Inactive"
+                        time_str = "-"
+                    table.add_row(name, status, time_str)
+                except Exception:
+                    table.add_row(name, "[dim]N/A[/dim]", "-")
+
+            console.print(table)
+
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Device Inbox Commands
+# =============================================================================
+
+
+@device.group("inbox")
+def device_inbox() -> None:
+    """Manage device inbox (newly paired devices)."""
+    pass
+
+
+@device_inbox.command("list")
+def device_inbox_list() -> None:
+    """List devices waiting in the inbox."""
+    with get_backend() as backend:
+        try:
+            devices = backend.list_inbox_devices()
+
+            if not devices:
+                console.print("No devices in inbox.")
+                return
+
+            table = Table(title="Inbox Devices")
+            table.add_column("Address", style="cyan")
+            table.add_column("Name", style="green")
+
+            for dev in devices:
+                table.add_row(dev.address, dev.name)
+
+            console.print(table)
+            console.print()
+            console.print("[dim]Use 'ccu device inbox accept <address>' to accept a device[/dim]")
+
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@device_inbox.command("accept")
+@click.argument("address")
+def device_inbox_accept(address: str) -> None:
+    """Accept a device from the inbox.
+
+    ADDRESS: Device address to accept
+    """
+    with get_backend() as backend:
+        try:
+            success = backend.accept_inbox_device(address)
+            if success:
+                console.print(f"[green]OK[/green] Accepted device {address}")
+                console.print("[dim]Device should now appear in device list[/dim]")
+            else:
+                error_console.print(f"[red]Error:[/red] Failed to accept device {address}")
+                sys.exit(1)
+
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@device_inbox.command("accept-all")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def device_inbox_accept_all(yes: bool) -> None:
+    """Accept all devices from the inbox."""
+    with get_backend() as backend:
+        try:
+            devices = backend.list_inbox_devices()
+
+            if not devices:
+                console.print("No devices in inbox.")
+                return
+
+            if not yes:
+                console.print(f"Found {len(devices)} device(s) in inbox:")
+                for dev in devices:
+                    console.print(f"  - {dev.address} ({dev.name})")
+                if not click.confirm("Accept all devices?"):
+                    console.print("Cancelled")
+                    return
+
+            accepted = 0
+            failed = 0
+            for dev in devices:
+                success = backend.accept_inbox_device(dev.address)
+                if success:
+                    console.print(f"[green]OK[/green] Accepted {dev.address}")
+                    accepted += 1
+                else:
+                    console.print(f"[red]Failed[/red] {dev.address}")
+                    failed += 1
+
+            console.print()
+            console.print(f"Accepted: {accepted}, Failed: {failed}")
+
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -786,6 +1041,28 @@ def link() -> None:
     pass
 
 
+def _get_channel_name(backend: CCUBackend, address: str) -> str:
+    """Get human-readable channel name for an address.
+
+    If the channel name doesn't include the device name, prepends it for context.
+    """
+    if ":" not in address:
+        return address
+    device_addr = address.split(":")[0]
+    device = backend.get_device(device_addr)
+    if device is None:
+        return address
+    channels = backend.get_device_channels(device_addr)
+    for ch in channels:
+        if ch.address == address:
+            ch_name = ch.name if ch.name else address
+            # If channel name doesn't start with device name, add it for context
+            if device.name and not ch_name.startswith(device.name):
+                return f"{device.name}: {ch_name}"
+            return ch_name
+    return address
+
+
 @link.command("list")
 @click.option(
     "--address",
@@ -799,26 +1076,60 @@ def link() -> None:
     default="HmIP-RF",
     help="Interface to use (default: HmIP-RF)",
 )
-def link_list(address: str | None, interface: str) -> None:
-    """List device links (Direktverknüpfungen)."""
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    help="Output as JSON with full details (addresses, names, etc.)",
+)
+def link_list(address: str | None, interface: str, output_json: bool) -> None:
+    """List device links (Direktverknüpfungen).
+
+    By default shows human-readable channel names. Use --json for full data
+    including addresses.
+    """
     with get_backend() as backend:
         try:
             links = backend.list_links(address, interface)
 
             if not links:
-                console.print("No links found.")
+                if output_json:
+                    console.print("[]")
+                else:
+                    console.print("No links found.")
                 return
 
-            table = Table(title="Device Links")
-            table.add_column("Sender", style="cyan")
-            table.add_column("Receiver", style="green")
-            table.add_column("Name", style="yellow")
-            table.add_column("Description", style="magenta")
+            if output_json:
+                # Full JSON output with all details
+                json_data = []
+                for lnk in links:
+                    json_data.append({
+                        "sender": {
+                            "address": lnk.sender,
+                            "name": _get_channel_name(backend, lnk.sender),
+                        },
+                        "receiver": {
+                            "address": lnk.receiver,
+                            "name": _get_channel_name(backend, lnk.receiver),
+                        },
+                        "link_name": lnk.name,
+                        "description": lnk.description,
+                    })
+                console.print_json(json.dumps(json_data, indent=2))
+            else:
+                # Human-readable table with channel names
+                table = Table(title="Device Links")
+                table.add_column("Sender", style="cyan")
+                table.add_column("Receiver", style="green")
+                table.add_column("Link Name", style="yellow")
+                table.add_column("Description", style="magenta")
 
-            for lnk in links:
-                table.add_row(lnk.sender, lnk.receiver, lnk.name, lnk.description)
+                for lnk in links:
+                    sender_name = _get_channel_name(backend, lnk.sender)
+                    receiver_name = _get_channel_name(backend, lnk.receiver)
+                    table.add_row(sender_name, receiver_name, lnk.name, lnk.description)
 
-            console.print(table)
+                console.print(table)
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
