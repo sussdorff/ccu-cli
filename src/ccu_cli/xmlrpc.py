@@ -204,27 +204,3 @@ class XMLRPCClient:
         except Exception as e:
             raise XMLRPCError(f"Failed to set link paramset: {e}") from e
 
-    def list_devices(self) -> list[dict[str, Any]]:
-        """List all devices on this interface.
-
-        Returns:
-            List of device descriptions
-        """
-        try:
-            return self.proxy.listDevices()
-        except Exception as e:
-            raise XMLRPCError(f"Failed to list devices: {e}") from e
-
-    def get_device_description(self, address: str) -> dict[str, Any]:
-        """Get device or channel description.
-
-        Args:
-            address: Device or channel address
-
-        Returns:
-            Device description dictionary
-        """
-        try:
-            return self.proxy.getDeviceDescription(address)
-        except Exception as e:
-            raise XMLRPCError(f"Failed to get device description: {e}") from e

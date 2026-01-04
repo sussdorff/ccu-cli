@@ -10,7 +10,6 @@ from rich.table import Table
 from .backend import CCUBackend, BackendError
 from .config import ConfigurationError, load_config
 from .rega import ReGaClient, ReGaError
-from .xmlrpc import XMLRPCClient, XMLRPCError
 
 console = Console()
 error_console = Console(stderr=True)
@@ -53,6 +52,19 @@ def print_json(data: Any) -> None:
     console.print_json(json.dumps(data))
 
 
+def _format_timestamp(ts: int | str | None) -> str:
+    """Format Unix timestamp for display."""
+    if ts is None:
+        return "N/A"
+    if isinstance(ts, str):
+        return ts if ts else "Never"
+    if ts == 0:
+        return "Never"
+    from datetime import datetime
+
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+
 @click.group()
 @click.version_option()
 def main() -> None:
@@ -84,8 +96,19 @@ def info() -> None:
             sys.exit(1)
 
 
-@main.command()
-def devices() -> None:
+# =============================================================================
+# Device Commands
+# =============================================================================
+
+
+@main.group()
+def device() -> None:
+    """Manage CCU devices."""
+    pass
+
+
+@device.command("list")
+def device_list() -> None:
     """List all devices."""
     with get_backend() as backend:
         try:
@@ -97,9 +120,9 @@ def devices() -> None:
             table.add_column("Model", style="yellow")
             table.add_column("Available", style="magenta")
 
-            for device in devices:
-                available = "✓" if device.available else "✗"
-                table.add_row(device.address, device.name, device.model, available)
+            for dev in devices:
+                available = "✓" if dev.available else "✗"
+                table.add_row(dev.address, dev.name, dev.model, available)
 
             console.print(table)
         except BackendError as e:
@@ -110,10 +133,13 @@ def devices() -> None:
             sys.exit(1)
 
 
-@main.command()
+@device.command("get")
 @click.argument("address")
-def device(address: str) -> None:
-    """Show device details."""
+def device_get(address: str) -> None:
+    """Show device details.
+
+    ADDRESS: Device serial/address (e.g., 000A1B2C3D4E5F)
+    """
     with get_backend() as backend:
         try:
             dev = backend.get_device(address)
@@ -158,10 +184,10 @@ def device(address: str) -> None:
             sys.exit(1)
 
 
-@main.command()
+@device.command("rename")
 @click.argument("channel_id", type=int)
 @click.argument("new_name")
-def rename(channel_id: int, new_name: str) -> None:
+def device_rename(channel_id: int, new_name: str) -> None:
     """Rename a channel/device.
 
     CHANNEL_ID: The channel's internal ID
@@ -179,9 +205,55 @@ def rename(channel_id: int, new_name: str) -> None:
             sys.exit(1)
 
 
-@main.command()
+@device.command("config")
+@click.argument("channel_address")
+def device_config(channel_address: str) -> None:
+    """Show channel configuration (MASTER parameters).
+
+    CHANNEL_ADDRESS format: <address>:<channel>
+    Example: 000A1B2C3D4E5F:0
+    """
+    with get_backend() as backend:
+        try:
+            data = backend.get_paramset(channel_address)
+            print_json(data)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@device.command("refresh")
+def device_refresh() -> None:
+    """Reload hub data (programs, sysvars) from CCU."""
+    with get_backend() as backend:
+        try:
+            backend.refresh_data()
+            console.print("[green]OK[/green] Data refreshed")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Datapoint Commands
+# =============================================================================
+
+
+@main.group()
+def datapoint() -> None:
+    """Read and write datapoint values."""
+    pass
+
+
+@datapoint.command("get")
 @click.argument("path")
-def get(path: str) -> None:
+def datapoint_get(path: str) -> None:
     """Read a datapoint value.
 
     PATH format: <address>:<channel>/<datapoint>
@@ -191,7 +263,7 @@ def get(path: str) -> None:
         # Parse path: address:channel/datapoint
         if "/" not in path:
             raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
-        channel_part, datapoint = path.rsplit("/", 1)
+        channel_part, datapoint_name = path.rsplit("/", 1)
         if ":" not in channel_part:
             raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
         channel_address = channel_part
@@ -201,7 +273,7 @@ def get(path: str) -> None:
 
     with get_backend() as backend:
         try:
-            value = backend.read_value(channel_address, datapoint)
+            value = backend.read_value(channel_address, datapoint_name)
             console.print(value)
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
@@ -211,20 +283,20 @@ def get(path: str) -> None:
             sys.exit(1)
 
 
-@main.command("set")
+@datapoint.command("set")
 @click.argument("path")
 @click.argument("value")
-def set_value(path: str, value: str) -> None:
+def datapoint_set(path: str, value: str) -> None:
     """Set a datapoint value.
 
     PATH format: <address>:<channel>/<datapoint>
-    Example: ccu set 000A1B2C3D4E5F:1/STATE true
+    Example: ccu datapoint set 000A1B2C3D4E5F:1/STATE true
     """
     try:
         # Parse path: address:channel/datapoint
         if "/" not in path:
             raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
-        channel_part, datapoint = path.rsplit("/", 1)
+        channel_part, datapoint_name = path.rsplit("/", 1)
         if ":" not in channel_part:
             raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
         channel_address = channel_part
@@ -249,7 +321,7 @@ def set_value(path: str, value: str) -> None:
 
     with get_backend() as backend:
         try:
-            backend.write_value(channel_address, datapoint, parsed_value)
+            backend.write_value(channel_address, datapoint_name, parsed_value)
             console.print(f"[green]OK[/green] {path} = {parsed_value}")
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
@@ -259,8 +331,19 @@ def set_value(path: str, value: str) -> None:
             sys.exit(1)
 
 
-@main.command()
-def sysvars() -> None:
+# =============================================================================
+# Sysvar Commands
+# =============================================================================
+
+
+@main.group()
+def sysvar() -> None:
+    """Manage system variables."""
+    pass
+
+
+@sysvar.command("list")
+def sysvar_list() -> None:
     """List all system variables."""
     with get_backend() as backend:
         try:
@@ -272,12 +355,12 @@ def sysvars() -> None:
             table.add_column("Type", style="yellow")
             table.add_column("Unit", style="magenta")
 
-            for sysvar in sysvars:
+            for sv in sysvars:
                 table.add_row(
-                    sysvar.name,
-                    str(sysvar.value),
-                    sysvar.data_type,
-                    sysvar.unit or "",
+                    sv.name,
+                    str(sv.value),
+                    sv.data_type,
+                    sv.unit or "",
                 )
 
             console.print(table)
@@ -289,23 +372,15 @@ def sysvars() -> None:
             sys.exit(1)
 
 
+# =============================================================================
+# Program Commands
+# =============================================================================
+
+
 @main.group()
 def program() -> None:
     """Manage CCU programs."""
     pass
-
-
-def _format_timestamp(ts: int | str | None) -> str:
-    """Format Unix timestamp for display."""
-    if ts is None:
-        return "N/A"
-    if isinstance(ts, str):
-        return ts if ts else "Never"
-    if ts == 0:
-        return "Never"
-    from datetime import datetime
-
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 @program.command("list")
@@ -480,103 +555,19 @@ def program_disable(id_or_name: str) -> None:
             sys.exit(1)
 
 
-# Legacy commands for backwards compatibility
-@main.command(deprecated=True, hidden=True)
-def programs() -> None:
-    """List all programs. (deprecated: use 'program list')"""
-    with get_backend() as backend:
-        try:
-            prgs = backend.list_programs()
-
-            table = Table(title="Programs")
-            table.add_column("ID", style="cyan")
-            table.add_column("Name", style="green")
-            table.add_column("Active", style="yellow")
-            table.add_column("Internal", style="magenta")
-
-            for prg in prgs:
-                if prg.is_internal:
-                    continue
-                active_str = "✓" if prg.is_active else "✗"
-                internal_str = "✓" if prg.is_internal else ""
-                table.add_row(
-                    prg.pid,
-                    prg.name,
-                    active_str,
-                    internal_str,
-                )
-
-            console.print(table)
-            console.print(
-                "[yellow]Note:[/yellow] 'ccu programs' is deprecated. Use 'ccu program list' instead."
-            )
-        except BackendError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
+# =============================================================================
+# Room Commands
+# =============================================================================
 
 
-@main.command(deprecated=True, hidden=True)
-@click.argument("name")
-def run(name: str) -> None:
-    """Execute a program by name. (deprecated: use 'program run')"""
-    with get_backend() as backend:
-        try:
-            prg = backend.get_program(name)
-            if not prg:
-                raise BackendError(f"Program not found: {name}")
-            backend.run_program(name)
-            console.print(f"[green]OK[/green] Program '{name}' executed")
-            console.print(
-                "[yellow]Note:[/yellow] 'ccu run' is deprecated. Use 'ccu program run' instead."
-            )
-        except BackendError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
+@main.group()
+def room() -> None:
+    """Manage CCU rooms."""
+    pass
 
 
-@main.command()
-@click.argument("channel_address")
-def config(channel_address: str) -> None:
-    """Show channel configuration (MASTER parameters).
-
-    CHANNEL_ADDRESS format: <address>:<channel>
-    Example: 000A1B2C3D4E5F:0
-    """
-    with get_backend() as backend:
-        try:
-            data = backend.get_paramset(channel_address)
-            print_json(data)
-        except BackendError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
-@main.command()
-def refresh() -> None:
-    """Reload hub data (programs, sysvars) from CCU."""
-    with get_backend() as backend:
-        try:
-            backend.refresh_data()
-            console.print("[green]OK[/green] Data refreshed")
-        except BackendError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
-@main.command()
-def rooms() -> None:
+@room.command("list")
+def room_list() -> None:
     """List all rooms."""
     with get_rega_client() as client:
         try:
@@ -586,8 +577,8 @@ def rooms() -> None:
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="green")
 
-            for room in rooms:
-                table.add_row(str(room["id"]), room["name"])
+            for rm in rooms:
+                table.add_row(str(rm["id"]), rm["name"])
 
             console.print(table)
         except ReGaError as e:
@@ -598,15 +589,9 @@ def rooms() -> None:
             sys.exit(1)
 
 
-@main.group()
-def room() -> None:
-    """Manage CCU rooms."""
-    pass
-
-
-@room.command("show")
+@room.command("get")
 @click.argument("room_id", type=int)
-def room_show(room_id: int) -> None:
+def room_get(room_id: int) -> None:
     """Show room details including devices.
 
     ROOM_ID: The room's internal ID
@@ -632,8 +617,8 @@ def room_show(room_id: int) -> None:
                 table.add_column("Name", style="green")
                 table.add_column("Address", style="yellow")
 
-                for device in devices:
-                    table.add_row(str(device.id), device.name, device.address)
+                for dev in devices:
+                    table.add_row(str(dev.id), dev.name, dev.address)
 
                 console.print(table)
             else:
@@ -653,8 +638,8 @@ def room_create(name: str) -> None:
     """Create a new room."""
     with get_rega_client() as client:
         try:
-            room_id = client.create_room(name)
-            console.print(f"[green]OK[/green] Created room '{name}' with ID {room_id}")
+            new_room_id = client.create_room(name)
+            console.print(f"[green]OK[/green] Created room '{name}' with ID {new_room_id}")
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -764,8 +749,8 @@ def room_devices(room_id: int) -> None:
             table.add_column("Name", style="green")
             table.add_column("Address", style="yellow")
 
-            for device in devices:
-                table.add_row(str(device.id), device.name, device.address)
+            for dev in devices:
+                table.add_row(str(dev.id), dev.name, dev.address)
 
             console.print(table)
         except ReGaError as e:
@@ -774,6 +759,11 @@ def room_devices(room_id: int) -> None:
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
+
+
+# =============================================================================
+# Link Commands
+# =============================================================================
 
 
 @main.group()
@@ -841,9 +831,9 @@ def link_get(sender: str, receiver: str, interface: str) -> None:
     """
     with get_backend() as backend:
         try:
-            info = backend.get_link(sender, receiver, interface)
+            link_info = backend.get_link(sender, receiver, interface)
 
-            if not info:
+            if not link_info:
                 error_console.print(f"[red]Link not found:[/red] {sender} -> {receiver}")
                 sys.exit(1)
 
@@ -851,11 +841,11 @@ def link_get(sender: str, receiver: str, interface: str) -> None:
             table.add_column("Property", style="cyan")
             table.add_column("Value", style="green")
 
-            table.add_row("Sender", info.sender)
-            table.add_row("Receiver", info.receiver)
-            table.add_row("Name", info.name or "(none)")
-            table.add_row("Description", info.description or "(none)")
-            table.add_row("Flags", str(info.flags))
+            table.add_row("Sender", link_info.sender)
+            table.add_row("Receiver", link_info.receiver)
+            table.add_row("Name", link_info.name or "(none)")
+            table.add_row("Description", link_info.description or "(none)")
+            table.add_row("Flags", str(link_info.flags))
 
             console.print(table)
         except BackendError as e:
@@ -1016,6 +1006,340 @@ def link_config_set(
             console.print(f"[green]OK[/green] Updated {side_label} parameters: {sender} -> {receiver}")
             for key, value in param_dict.items():
                 console.print(f"  {key} = {value}")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Legacy Commands (deprecated, hidden)
+# =============================================================================
+
+
+@main.command(deprecated=True, hidden=True)
+def devices() -> None:
+    """List all devices. (deprecated: use 'device list')"""
+    with get_backend() as backend:
+        try:
+            devs = backend.list_devices()
+
+            table = Table(title="Devices")
+            table.add_column("Address", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Model", style="yellow")
+            table.add_column("Available", style="magenta")
+
+            for dev in devs:
+                available = "✓" if dev.available else "✗"
+                table.add_row(dev.address, dev.name, dev.model, available)
+
+            console.print(table)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu devices' is deprecated. Use 'ccu device list' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+def sysvars() -> None:
+    """List all system variables. (deprecated: use 'sysvar list')"""
+    with get_backend() as backend:
+        try:
+            svars = backend.list_sysvars()
+
+            table = Table(title="System Variables")
+            table.add_column("Name", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_column("Type", style="yellow")
+            table.add_column("Unit", style="magenta")
+
+            for sv in svars:
+                table.add_row(
+                    sv.name,
+                    str(sv.value),
+                    sv.data_type,
+                    sv.unit or "",
+                )
+
+            console.print(table)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu sysvars' is deprecated. Use 'ccu sysvar list' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+def rooms() -> None:
+    """List all rooms. (deprecated: use 'room list')"""
+    with get_rega_client() as client:
+        try:
+            room_list_data = client.list_rooms()
+
+            table = Table(title="Rooms")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+
+            for rm in room_list_data:
+                table.add_row(str(rm["id"]), rm["name"])
+
+            console.print(table)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu rooms' is deprecated. Use 'ccu room list' instead."
+            )
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+def programs() -> None:
+    """List all programs. (deprecated: use 'program list')"""
+    with get_backend() as backend:
+        try:
+            prgs = backend.list_programs()
+
+            table = Table(title="Programs")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Active", style="yellow")
+            table.add_column("Internal", style="magenta")
+
+            for prg in prgs:
+                if prg.is_internal:
+                    continue
+                active_str = "✓" if prg.is_active else "✗"
+                internal_str = "✓" if prg.is_internal else ""
+                table.add_row(
+                    prg.pid,
+                    prg.name,
+                    active_str,
+                    internal_str,
+                )
+
+            console.print(table)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu programs' is deprecated. Use 'ccu program list' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+@click.argument("name")
+def run(name: str) -> None:
+    """Execute a program by name. (deprecated: use 'program run')"""
+    with get_backend() as backend:
+        try:
+            prg = backend.get_program(name)
+            if not prg:
+                raise BackendError(f"Program not found: {name}")
+            backend.run_program(name)
+            console.print(f"[green]OK[/green] Program '{name}' executed")
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu run' is deprecated. Use 'ccu program run' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+@click.argument("channel_id", type=int)
+@click.argument("new_name")
+def rename(channel_id: int, new_name: str) -> None:
+    """Rename a channel/device. (deprecated: use 'device rename')"""
+    with get_rega_client() as client:
+        try:
+            client.rename_channel(channel_id, new_name)
+            console.print(f"[green]OK[/green] Renamed channel {channel_id} to '{new_name}'")
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu rename' is deprecated. Use 'ccu device rename' instead."
+            )
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+@click.argument("channel_address")
+def config(channel_address: str) -> None:
+    """Show channel configuration. (deprecated: use 'device config')"""
+    with get_backend() as backend:
+        try:
+            data = backend.get_paramset(channel_address)
+            print_json(data)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu config' is deprecated. Use 'ccu device config' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command(deprecated=True, hidden=True)
+def refresh() -> None:
+    """Reload hub data from CCU. (deprecated: use 'device refresh')"""
+    with get_backend() as backend:
+        try:
+            backend.refresh_data()
+            console.print("[green]OK[/green] Data refreshed")
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu refresh' is deprecated. Use 'ccu device refresh' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command("get", deprecated=True, hidden=True)
+@click.argument("path")
+def get_value(path: str) -> None:
+    """Read a datapoint value. (deprecated: use 'datapoint get')"""
+    try:
+        if "/" not in path:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_part, dp = path.rsplit("/", 1)
+        if ":" not in channel_part:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_address = channel_part
+    except ValueError as e:
+        error_console.print(f"[red]Error:[/red] Invalid path format: {e}")
+        sys.exit(1)
+
+    with get_backend() as backend:
+        try:
+            value = backend.read_value(channel_address, dp)
+            console.print(value)
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu get' is deprecated. Use 'ccu datapoint get' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@main.command("set", deprecated=True, hidden=True)
+@click.argument("path")
+@click.argument("value")
+def set_value(path: str, value: str) -> None:
+    """Set a datapoint value. (deprecated: use 'datapoint set')"""
+    try:
+        if "/" not in path:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_part, dp = path.rsplit("/", 1)
+        if ":" not in channel_part:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_address = channel_part
+    except ValueError as e:
+        error_console.print(f"[red]Error:[/red] Invalid path format: {e}")
+        sys.exit(1)
+
+    parsed_value: Any
+    if value.lower() == "true":
+        parsed_value = True
+    elif value.lower() == "false":
+        parsed_value = False
+    else:
+        try:
+            parsed_value = int(value)
+        except ValueError:
+            try:
+                parsed_value = float(value)
+            except ValueError:
+                parsed_value = value
+
+    with get_backend() as backend:
+        try:
+            backend.write_value(channel_address, dp, parsed_value)
+            console.print(f"[green]OK[/green] {path} = {parsed_value}")
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu set' is deprecated. Use 'ccu datapoint set' instead."
+            )
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# Keep legacy 'device' command for backwards compatibility (single arg version)
+@main.command("show-device", deprecated=True, hidden=True)
+@click.argument("address")
+def show_device(address: str) -> None:
+    """Show device details. (deprecated: use 'device get')"""
+    with get_backend() as backend:
+        try:
+            dev = backend.get_device(address)
+            if dev is None:
+                error_console.print(f"[red]Error:[/red] Device not found: {address}")
+                sys.exit(1)
+
+            info_table = Table(title=f"Device: {dev.name}")
+            info_table.add_column("Property", style="cyan")
+            info_table.add_column("Value", style="green")
+
+            info_table.add_row("Address", dev.address)
+            info_table.add_row("Name", dev.name)
+            info_table.add_row("Model", dev.model)
+            info_table.add_row("Type", dev.device_type)
+            info_table.add_row("Interface", dev.interface)
+            info_table.add_row("Firmware", dev.firmware)
+            info_table.add_row("Available", "Yes" if dev.available else "No")
+
+            console.print(info_table)
+
+            channels = backend.get_device_channels(address)
+            if channels:
+                console.print()
+                ch_table = Table(title="Channels")
+                ch_table.add_column("No", style="cyan")
+                ch_table.add_column("Address", style="yellow")
+                ch_table.add_column("Name", style="green")
+
+                for ch in channels:
+                    ch_table.add_row(str(ch.channel_no), ch.address, ch.name)
+
+                console.print(ch_table)
+
+            console.print(
+                "[yellow]Note:[/yellow] 'ccu show-device' is deprecated. Use 'ccu device get' instead."
+            )
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

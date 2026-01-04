@@ -209,41 +209,6 @@ class TestSetLinkParamset:
             client.set_link_paramset("a", "b", {})
 
 
-class TestListDevices:
-    """Tests for XMLRPCClient.list_devices()."""
-
-    def test_returns_device_list(self, mock_xmlrpc_client, mock_proxy):
-        """Should return list of devices."""
-        mock_proxy.listDevices.return_value = [
-            {"ADDRESS": "000B5D89B014D8", "TYPE": "HmIP-WRC6"},
-            {"ADDRESS": "0013A40997105E", "TYPE": "HmIP-FBL"},
-        ]
-
-        client = mock_xmlrpc_client()
-        devices = client.list_devices()
-
-        assert len(devices) == 2
-        assert devices[0]["TYPE"] == "HmIP-WRC6"
-
-
-class TestGetDeviceDescription:
-    """Tests for XMLRPCClient.get_device_description()."""
-
-    def test_returns_device_description(self, mock_xmlrpc_client, mock_proxy):
-        """Should return device description."""
-        mock_proxy.getDeviceDescription.return_value = {
-            "ADDRESS": "000B5D89B014D8",
-            "TYPE": "HmIP-WRC6",
-            "PARAMSETS": ["MASTER", "VALUES"],
-        }
-
-        client = mock_xmlrpc_client()
-        desc = client.get_device_description("000B5D89B014D8")
-
-        mock_proxy.getDeviceDescription.assert_called_once_with("000B5D89B014D8")
-        assert desc["TYPE"] == "HmIP-WRC6"
-
-
 class TestXMLRPCClientContextManager:
     """Tests for XMLRPCClient context manager."""
 
