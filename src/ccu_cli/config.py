@@ -12,6 +12,12 @@ except ImportError:
     import tomli as tomllib
 
 
+class ConfigurationError(Exception):
+    """Error in configuration."""
+
+    pass
+
+
 @dataclass
 class CCUConfig:
     """CCU connection configuration."""
@@ -27,6 +33,26 @@ class CCUConfig:
         if self.username and self.password:
             return (self.username, self.password)
         return None
+
+    def validate(self) -> None:
+        """Validate that all required configuration is present.
+
+        Raises:
+            ConfigurationError: If required configuration is missing
+        """
+        missing = []
+        if not self.host or self.host == "localhost":
+            missing.append("CCU_HOST")
+        if not self.username:
+            missing.append("CCU_USERNAME")
+        if not self.password:
+            missing.append("CCU_PASSWORD")
+
+        if missing:
+            raise ConfigurationError(
+                f"Missing required configuration: {', '.join(missing)}. "
+                "Set these in .env file or environment variables."
+            )
 
 
 def get_xdg_config_home() -> Path:

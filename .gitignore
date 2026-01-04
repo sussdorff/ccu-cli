@@ -45,3 +45,5 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+ccu-cli-6f0/
+aiohomematic_storage/

@@ -51,11 +51,15 @@ class TestXMLRPCClientInit:
         client = XMLRPCClient(xmlrpc_config)
         assert client.base_url.startswith("http://")
 
-    def test_uses_https_when_configured(self):
-        """Should use HTTPS when configured."""
+    def test_always_uses_http_for_xmlrpc(self):
+        """Should always use HTTP for XML-RPC regardless of https config.
+
+        The CCU XML-RPC API (ports 2001, 2010) uses plain HTTP.
+        The https setting only applies to the web interface.
+        """
         config = CCUConfig(host="test-ccu", https=True)
         client = XMLRPCClient(config)
-        assert client.base_url.startswith("https://")
+        assert client.base_url.startswith("http://")
 
     def test_base_url_includes_port(self, xmlrpc_config):
         """Should include port in base URL."""

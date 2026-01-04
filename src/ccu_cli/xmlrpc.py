@@ -75,9 +75,12 @@ class XMLRPCClient:
 
     @property
     def base_url(self) -> str:
-        """Return the base URL for XML-RPC API."""
-        scheme = "https" if self.config.https else "http"
-        return f"{scheme}://{self.config.host}:{self.port}"
+        """Return the base URL for XML-RPC API.
+
+        Note: CCU XML-RPC API (ports 2001, 2010) always uses HTTP,
+        regardless of the HTTPS setting which only applies to the web interface.
+        """
+        return f"http://{self.config.host}:{self.port}"
 
     @property
     def proxy(self) -> ServerProxy:

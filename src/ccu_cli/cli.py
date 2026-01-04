@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .backend import CCUBackend, BackendError
-from .config import load_config
+from .config import ConfigurationError, load_config
 from .rega import Program as ReGaProgram, ReGaClient, ReGaError, RoomDevice
 
 console = Console()
@@ -16,14 +16,32 @@ error_console = Console(stderr=True)
 
 
 def get_backend() -> CCUBackend:
-    """Create a CCU backend with loaded configuration."""
+    """Create a CCU backend with loaded configuration.
+
+    Raises:
+        SystemExit: If required configuration is missing
+    """
     config = load_config()
+    try:
+        config.validate()
+    except ConfigurationError as e:
+        error_console.print(f"[red]Configuration Error:[/red] {e}")
+        sys.exit(1)
     return CCUBackend(config)
 
 
 def get_rega_client() -> ReGaClient:
-    """Create a ReGa client with loaded configuration."""
+    """Create a ReGa client with loaded configuration.
+
+    Raises:
+        SystemExit: If required configuration is missing
+    """
     config = load_config()
+    try:
+        config.validate()
+    except ConfigurationError as e:
+        error_console.print(f"[red]Configuration Error:[/red] {e}")
+        sys.exit(1)
     return ReGaClient(config)
 
 

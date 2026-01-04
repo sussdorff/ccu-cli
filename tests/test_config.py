@@ -92,6 +92,10 @@ https = false
 """)
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         monkeypatch.setenv("CCU_HOST", "env-override.local")
+        # Clear any env vars that might override from .env file
+        monkeypatch.delenv("CCU_HTTPS", raising=False)
+        monkeypatch.delenv("CCU_USERNAME", raising=False)
+        monkeypatch.delenv("CCU_PASSWORD", raising=False)
 
         config = load_config()
 
