@@ -96,6 +96,23 @@ ccu rooms
 ccu room create <name>
 ccu room rename <id> <new-name>
 ccu room delete <id>
+
+# List device links
+ccu link list [address]
+
+# Show link details
+ccu link get <sender> <receiver>
+
+# Create/delete links
+ccu link create <sender> <receiver> [--name "Link Name"]
+ccu link delete <sender> <receiver>
+
+# Get link parameters (queries both sender and receiver sides)
+ccu link config get <sender> <receiver>
+
+# Set link parameters
+ccu link config set <sender> <receiver> PARAM=value [PARAM2=value2 ...]
+ccu link config set --side sender <sender> <receiver> PARAM=value  # for button profiles
 ```
 
 ## Development
