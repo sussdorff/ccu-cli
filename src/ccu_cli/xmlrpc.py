@@ -127,58 +127,6 @@ class XMLRPCClient:
             )
         return links
 
-    def get_link_peers(self, address: str) -> list[str]:
-        """Get all link peers for a channel.
-
-        Args:
-            address: Channel address (e.g., "000B5D89B014D8:1")
-
-        Returns:
-            List of peer addresses
-        """
-        try:
-            return self.proxy.getLinkPeers(address)
-        except Exception as e:
-            raise XMLRPCError(f"Failed to get link peers: {e}") from e
-
-    def add_link(
-        self,
-        sender: str,
-        receiver: str,
-        name: str = "",
-        description: str = "",
-    ) -> None:
-        """Create a new device link (Direktverknüpfung).
-
-        Args:
-            sender: Sender channel address
-            receiver: Receiver channel address
-            name: Optional link name
-            description: Optional link description
-
-        Raises:
-            XMLRPCError: If link creation fails
-        """
-        try:
-            self.proxy.addLink(sender, receiver, name, description)
-        except Exception as e:
-            raise XMLRPCError(f"Failed to add link: {e}") from e
-
-    def remove_link(self, sender: str, receiver: str) -> None:
-        """Remove a device link.
-
-        Args:
-            sender: Sender channel address
-            receiver: Receiver channel address
-
-        Raises:
-            XMLRPCError: If link removal fails
-        """
-        try:
-            self.proxy.removeLink(sender, receiver)
-        except Exception as e:
-            raise XMLRPCError(f"Failed to remove link: {e}") from e
-
     def get_link_info(self, sender: str, receiver: str) -> LinkInfo | None:
         """Get detailed information about a specific link.
 

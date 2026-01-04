@@ -10,7 +10,6 @@ from rich.table import Table
 from .backend import CCUBackend, BackendError
 from .config import load_config
 from .rega import Program as ReGaProgram, ReGaClient, ReGaError, RoomDevice
-from .xmlrpc import XMLRPCClient, XMLRPCError
 
 console = Console()
 error_console = Console(stderr=True)
@@ -26,12 +25,6 @@ def get_rega_client() -> ReGaClient:
     """Create a ReGa client with loaded configuration."""
     config = load_config()
     return ReGaClient(config)
-
-
-def get_xmlrpc_client(interface: str = "HmIP-RF") -> XMLRPCClient:
-    """Create an XML-RPC client with loaded configuration."""
-    config = load_config()
-    return XMLRPCClient(config, interface)
 
 
 def print_json(data: Any) -> None:
@@ -768,7 +761,7 @@ def room_devices(room_id: int) -> None:
 
 @main.group()
 def link() -> None:
-    """Manage device links (Direktverknüpfungen) via XML-RPC."""
+    """Manage device links (Direktverknüpfungen)."""
     pass
 
 
@@ -787,9 +780,9 @@ def link() -> None:
 )
 def link_list(address: str | None, interface: str) -> None:
     """List device links (Direktverknüpfungen)."""
-    with get_xmlrpc_client(interface) as client:
+    with get_backend() as backend:
         try:
-            links = client.get_links(address)
+            links = backend.list_links(address, interface)
 
             if not links:
                 console.print("No links found.")
@@ -805,7 +798,7 @@ def link_list(address: str | None, interface: str) -> None:
                 table.add_row(lnk.sender, lnk.receiver, lnk.name, lnk.description)
 
             console.print(table)
-        except XMLRPCError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -813,112 +806,7 @@ def link_list(address: str | None, interface: str) -> None:
             sys.exit(1)
 
 
-@link.command("peers")
-@click.argument("address")
-@click.option(
-    "--interface",
-    "-i",
-    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
-    default="HmIP-RF",
-    help="Interface to use (default: HmIP-RF)",
-)
-def link_peers(address: str, interface: str) -> None:
-    """List link peers for a channel.
-
-    ADDRESS: Channel address (e.g., 000B5D89B014D8:1)
-    """
-    with get_xmlrpc_client(interface) as client:
-        try:
-            peers = client.get_link_peers(address)
-
-            if not peers:
-                console.print(f"No link peers for {address}")
-                return
-
-            table = Table(title=f"Link Peers for {address}")
-            table.add_column("Peer Address", style="cyan")
-
-            for peer in peers:
-                table.add_row(peer)
-
-            console.print(table)
-        except XMLRPCError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
-@link.command("add")
-@click.argument("sender")
-@click.argument("receiver")
-@click.option("--name", "-n", default="", help="Link name")
-@click.option("--description", "-d", default="", help="Link description")
-@click.option(
-    "--interface",
-    "-i",
-    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
-    default="HmIP-RF",
-    help="Interface to use (default: HmIP-RF)",
-)
-def link_add(
-    sender: str, receiver: str, name: str, description: str, interface: str
-) -> None:
-    """Create a device link (Direktverknüpfung).
-
-    SENDER: Sender channel address (e.g., 000B5D89B014D8:1)
-    RECEIVER: Receiver channel address (e.g., 000E9569A23B4C:4)
-    """
-    with get_xmlrpc_client(interface) as client:
-        try:
-            client.add_link(sender, receiver, name, description)
-            console.print(
-                f"[green]OK[/green] Created link: {sender} -> {receiver}"
-            )
-        except XMLRPCError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
-@link.command("remove")
-@click.argument("sender")
-@click.argument("receiver")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-@click.option(
-    "--interface",
-    "-i",
-    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
-    default="HmIP-RF",
-    help="Interface to use (default: HmIP-RF)",
-)
-def link_remove(sender: str, receiver: str, yes: bool, interface: str) -> None:
-    """Remove a device link.
-
-    SENDER: Sender channel address
-    RECEIVER: Receiver channel address
-    """
-    if not yes:
-        if not click.confirm(f"Remove link {sender} -> {receiver}?"):
-            console.print("Cancelled")
-            return
-
-    with get_xmlrpc_client(interface) as client:
-        try:
-            client.remove_link(sender, receiver)
-            console.print(f"[green]OK[/green] Removed link: {sender} -> {receiver}")
-        except XMLRPCError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
-@link.command("info")
+@link.command("get")
 @click.argument("sender")
 @click.argument("receiver")
 @click.option(
@@ -928,15 +816,15 @@ def link_remove(sender: str, receiver: str, yes: bool, interface: str) -> None:
     default="HmIP-RF",
     help="Interface to use (default: HmIP-RF)",
 )
-def link_info(sender: str, receiver: str, interface: str) -> None:
+def link_get(sender: str, receiver: str, interface: str) -> None:
     """Show link details.
 
     SENDER: Sender channel address
     RECEIVER: Receiver channel address
     """
-    with get_xmlrpc_client(interface) as client:
+    with get_backend() as backend:
         try:
-            info = client.get_link_info(sender, receiver)
+            info = backend.get_link(sender, receiver, interface)
 
             if not info:
                 error_console.print(f"[red]Link not found:[/red] {sender} -> {receiver}")
@@ -953,7 +841,7 @@ def link_info(sender: str, receiver: str, interface: str) -> None:
             table.add_row("Flags", str(info.flags))
 
             console.print(table)
-        except XMLRPCError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -961,7 +849,63 @@ def link_info(sender: str, receiver: str, interface: str) -> None:
             sys.exit(1)
 
 
-@link.command("params")
+@link.command("create")
+@click.argument("sender")
+@click.argument("receiver")
+@click.option("--name", "-n", default="", help="Link name")
+@click.option("--description", "-d", default="", help="Link description")
+def link_create(sender: str, receiver: str, name: str, description: str) -> None:
+    """Create a device link (Direktverknüpfung).
+
+    SENDER: Sender channel address (e.g., 000B5D89B014D8:1)
+    RECEIVER: Receiver channel address (e.g., 000E9569A23B4C:4)
+    """
+    with get_backend() as backend:
+        try:
+            backend.create_link(sender, receiver, name, description)
+            console.print(f"[green]OK[/green] Created link: {sender} -> {receiver}")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.command("delete")
+@click.argument("sender")
+@click.argument("receiver")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def link_delete(sender: str, receiver: str, yes: bool) -> None:
+    """Remove a device link.
+
+    SENDER: Sender channel address
+    RECEIVER: Receiver channel address
+    """
+    if not yes:
+        if not click.confirm(f"Remove link {sender} -> {receiver}?"):
+            console.print("Cancelled")
+            return
+
+    with get_backend() as backend:
+        try:
+            backend.delete_link(sender, receiver)
+            console.print(f"[green]OK[/green] Removed link: {sender} -> {receiver}")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link.group("config")
+def link_config() -> None:
+    """Manage link configuration (LINK paramset)."""
+    pass
+
+
+@link_config.command("get")
 @click.argument("sender")
 @click.argument("receiver")
 @click.option(
@@ -971,17 +915,80 @@ def link_info(sender: str, receiver: str, interface: str) -> None:
     default="HmIP-RF",
     help="Interface to use (default: HmIP-RF)",
 )
-def link_params(sender: str, receiver: str, interface: str) -> None:
+def link_config_get(sender: str, receiver: str, interface: str) -> None:
     """Show link parameters (LINK paramset).
 
     SENDER: Sender channel address
     RECEIVER: Receiver channel address
     """
-    with get_xmlrpc_client(interface) as client:
+    with get_backend() as backend:
         try:
-            params = client.get_link_paramset(sender, receiver)
+            params = backend.get_link_paramset(sender, receiver, interface)
             print_json(params)
-        except XMLRPCError as e:
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@link_config.command("set")
+@click.argument("sender")
+@click.argument("receiver")
+@click.argument("params", nargs=-1, required=True)
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default="HmIP-RF",
+    help="Interface to use (default: HmIP-RF)",
+)
+def link_config_set(
+    sender: str, receiver: str, params: tuple[str, ...], interface: str
+) -> None:
+    """Set link parameters.
+
+    SENDER: Sender channel address
+    RECEIVER: Receiver channel address
+    PARAMS: One or more key=value pairs (e.g., LONG_PRESS_TIME=1.0)
+
+    Example: ccu link config set 000B5D:1 000E9A:4 LONG_PRESS_TIME=1.0
+    """
+    # Parse key=value pairs
+    param_dict: dict[str, Any] = {}
+    for param in params:
+        if "=" not in param:
+            error_console.print(
+                f"[red]Error:[/red] Invalid parameter format: {param} (expected key=value)"
+            )
+            sys.exit(1)
+        key, value_str = param.split("=", 1)
+
+        # Parse value to appropriate type
+        parsed_value: Any
+        if value_str.lower() == "true":
+            parsed_value = True
+        elif value_str.lower() == "false":
+            parsed_value = False
+        else:
+            try:
+                parsed_value = int(value_str)
+            except ValueError:
+                try:
+                    parsed_value = float(value_str)
+                except ValueError:
+                    parsed_value = value_str
+
+        param_dict[key] = parsed_value
+
+    with get_backend() as backend:
+        try:
+            backend.set_link_paramset(sender, receiver, param_dict, interface)
+            console.print(f"[green]OK[/green] Updated link parameters: {sender} -> {receiver}")
+            for key, value in param_dict.items():
+                console.print(f"  {key} = {value}")
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
