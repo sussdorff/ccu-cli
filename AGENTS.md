@@ -2,6 +2,22 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## aiohomematic Documentation
+
+This project uses [hahomematic](https://github.com/SukramJ/hahomematic) (formerly aiohomematic) as the backend library for CCU communication. Local documentation is synced to `llms/aiohomematic/` for agent context.
+
+**Key docs:**
+- `llms/aiohomematic/getting_started.md` - Basic usage patterns
+- `llms/aiohomematic/architecture.md` - Component relationships
+- `llms/aiohomematic/common_operations.md` - Frequent use cases
+- `llms/aiohomematic/data_flow.md` - How data moves through the system
+- `llms/aiohomematic/event_bus.md` - Event-driven programming patterns
+- `llms/aiohomematic/glossary.md` - Terminology reference
+
+**To update docs:** `./llms/sync.sh`
+
+Read these docs before implementing features that interact with hahomematic.
+
 ## Testing Strategy: Test-Driven Development
 
 **This project follows TDD. Write tests BEFORE implementing code.**
