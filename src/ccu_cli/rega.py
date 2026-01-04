@@ -100,35 +100,6 @@ class ReGaClient:
         response.raise_for_status()
         return response.text
 
-    def create_room(self, name: str) -> int:
-        """Create a new room.
-
-        Args:
-            name: Name for the new room
-
-        Returns:
-            ID of the created room
-
-        Raises:
-            ReGaError: If room creation fails
-        """
-        script = f"""
-object room = dom.CreateObject(OT_ROOM);
-room.Name("{name}");
-WriteLine(room.ID());
-"""
-        result = self.execute(script)
-        # Response format: "<id>\r\n<xml...>"
-        # Extract the ID from the first line
-        lines = result.strip().split("\n")
-        if lines:
-            first_line = lines[0].strip()
-            try:
-                return int(first_line)
-            except ValueError:
-                raise ReGaError(f"Failed to create room: {result}")
-        raise ReGaError(f"No room ID returned: {result}")
-
     def rename_room(self, room_id: int, new_name: str) -> None:
         """Rename an existing room.
 

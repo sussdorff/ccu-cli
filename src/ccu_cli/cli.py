@@ -643,22 +643,6 @@ def room_get(room_id: int) -> None:
             sys.exit(1)
 
 
-@room.command("create")
-@click.argument("name")
-def room_create(name: str) -> None:
-    """Create a new room."""
-    with get_rega_client() as client:
-        try:
-            new_room_id = client.create_room(name)
-            console.print(f"[green]OK[/green] Created room '{name}' with ID {new_room_id}")
-        except ReGaError as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-        except Exception as e:
-            error_console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
-
-
 @room.command("rename")
 @click.argument("room_id", type=int)
 @click.argument("new_name")
