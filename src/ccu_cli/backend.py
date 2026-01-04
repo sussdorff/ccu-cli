@@ -580,6 +580,7 @@ class CCUBackend:
         sender: str,
         receiver: str,
         params: dict[str, Any],
+        side: str = "receiver",
         interface: str = "HmIP-RF",
     ) -> None:
         """Set parameters for a device link.
@@ -590,10 +591,16 @@ class CCUBackend:
             sender: Sender channel address
             receiver: Receiver channel address
             params: Dictionary of parameter values to set
+            side: Which side to set params on ("sender" or "receiver")
             interface: Interface to use
         """
         with XMLRPCClient(self.config, interface) as client:
-            client.set_link_paramset(sender, receiver, params)
+            if side == "receiver":
+                # Set on receiver side (actuator profiles)
+                client.set_link_paramset(receiver, sender, params)
+            else:
+                # Set on sender side (button profiles)
+                client.set_link_paramset(sender, receiver, params)
 
 
 @contextmanager

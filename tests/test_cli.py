@@ -592,6 +592,7 @@ class TestLinkConfigSetCommand:
             "000B5D89B014D8:1",
             "0013A40997105E:4",
             {"LONG_PRESS_TIME": 1.0},
+            "receiver",
             "HmIP-RF",
         )
 
@@ -616,6 +617,32 @@ class TestLinkConfigSetCommand:
             "sender",
             "receiver",
             {"PARAM1": 10, "PARAM2": True, "PARAM3": "text"},
+            "receiver",
+            "HmIP-RF",
+        )
+
+    def test_sets_params_on_sender_side(self, runner, mock_backend_context):
+        """Should set parameters on sender side when --side sender specified."""
+        result = runner.invoke(
+            main,
+            [
+                "link",
+                "config",
+                "set",
+                "--side",
+                "sender",
+                "000B5D89B014D8:1",
+                "0013A40997105E:4",
+                "LONG_PRESS_TIME=0.5",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_backend_context.set_link_paramset.assert_called_once_with(
+            "000B5D89B014D8:1",
+            "0013A40997105E:4",
+            {"LONG_PRESS_TIME": 0.5},
+            "sender",
             "HmIP-RF",
         )
 

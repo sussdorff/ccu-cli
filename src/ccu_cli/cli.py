@@ -955,6 +955,13 @@ def link_config_get(sender: str, receiver: str, interface: str) -> None:
 @click.argument("receiver")
 @click.argument("params", nargs=-1, required=True)
 @click.option(
+    "--side",
+    "-s",
+    type=click.Choice(["sender", "receiver"]),
+    default="receiver",
+    help="Which side to set params on (default: receiver for actuator profiles)",
+)
+@click.option(
     "--interface",
     "-i",
     type=click.Choice(["HmIP-RF", "BidCos-RF"]),
@@ -962,15 +969,18 @@ def link_config_get(sender: str, receiver: str, interface: str) -> None:
     help="Interface to use (default: HmIP-RF)",
 )
 def link_config_set(
-    sender: str, receiver: str, params: tuple[str, ...], interface: str
+    sender: str, receiver: str, params: tuple[str, ...], side: str, interface: str
 ) -> None:
     """Set link parameters.
 
     SENDER: Sender channel address
     RECEIVER: Receiver channel address
-    PARAMS: One or more key=value pairs (e.g., LONG_PRESS_TIME=1.0)
+    PARAMS: One or more key=value pairs (e.g., SHORT_DRIVING_MODE=1)
 
-    Example: ccu link config set 000B5D:1 000E9A:4 LONG_PRESS_TIME=1.0
+    By default sets on receiver side (actuator profiles like blind speed/timing).
+    Use --side sender for button/switch profiles.
+
+    Example: ccu link config set 000B5D:1 000E9A:4 SHORT_DRIVING_MODE=1
     """
     # Parse key=value pairs
     param_dict: dict[str, Any] = {}
@@ -1001,8 +1011,9 @@ def link_config_set(
 
     with get_backend() as backend:
         try:
-            backend.set_link_paramset(sender, receiver, param_dict, interface)
-            console.print(f"[green]OK[/green] Updated link parameters: {sender} -> {receiver}")
+            backend.set_link_paramset(sender, receiver, param_dict, side, interface)
+            side_label = "receiver (actuator)" if side == "receiver" else "sender (button)"
+            console.print(f"[green]OK[/green] Updated {side_label} parameters: {sender} -> {receiver}")
             for key, value in param_dict.items():
                 console.print(f"  {key} = {value}")
         except BackendError as e:
