@@ -5,6 +5,7 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock
 
 from ccu_cli.cli import main
+from ccu_cli.backend import Device, Channel, DataPoint, SysVar, Program as BackendProgram
 
 
 @pytest.fixture
@@ -14,12 +15,12 @@ def runner():
 
 
 @pytest.fixture
-def mock_client_context(mocker):
-    """Mock get_client to return a controllable mock."""
+def mock_backend_context(mocker):
+    """Mock get_backend to return a controllable mock."""
     mock = MagicMock()
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=False)
-    mocker.patch("ccu_cli.cli.get_client", return_value=mock)
+    mocker.patch("ccu_cli.cli.get_backend", return_value=mock)
     return mock
 
 
@@ -36,11 +37,11 @@ def mock_rega_context(mocker):
 class TestDevicesCommand:
     """Tests for 'ccu devices' command."""
 
-    def test_displays_devices_table(self, runner, mock_client_context):
+    def test_displays_devices_table(self, runner, mock_backend_context):
         """Should display devices in a table."""
-        mock_client_context.list_devices.return_value = [
-            {"rel": "device", "href": "NEQ123", "title": "Living Room"},
-            {"rel": "device", "href": "NEQ456", "title": "Kitchen"},
+        mock_backend_context.list_devices.return_value = [
+            Device(address="NEQ123", name="Living Room", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True),
+            Device(address="NEQ456", name="Kitchen", model="HmIP-eTRV", device_type="thermostat", interface="HmIP-RF", firmware="1.0.0", available=True),
         ]
 
         result = runner.invoke(main, ["devices"])
@@ -51,34 +52,34 @@ class TestDevicesCommand:
         assert "NEQ456" in result.output
         assert "Kitchen" in result.output
 
-    def test_filters_non_device_links(self, runner, mock_client_context):
-        """Should not display non-device links like 'root'."""
-        mock_client_context.list_devices.return_value = [
-            {"rel": "root", "href": "..", "title": "Root"},
-            {"rel": "device", "href": "NEQ123", "title": "Switch"},
+    def test_shows_availability_status(self, runner, mock_backend_context):
+        """Should show availability status."""
+        mock_backend_context.list_devices.return_value = [
+            Device(address="NEQ123", name="Switch", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True),
+            Device(address="NEQ456", name="Offline", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=False),
         ]
 
         result = runner.invoke(main, ["devices"])
 
         assert result.exit_code == 0
-        assert "NEQ123" in result.output
-        assert "Root" not in result.output
+        assert "✓" in result.output  # Available device
+        assert "✗" in result.output  # Unavailable device
 
 
 class TestGetCommand:
     """Tests for 'ccu get' command."""
 
-    def test_reads_and_displays_value(self, runner, mock_client_context):
+    def test_reads_and_displays_value(self, runner, mock_backend_context):
         """Should display the datapoint value."""
-        mock_client_context.get_datapoint.return_value = 21.5
+        mock_backend_context.read_value.return_value = 21.5
 
-        result = runner.invoke(main, ["get", "NEQ123/1/TEMPERATURE"])
+        result = runner.invoke(main, ["get", "NEQ123:1/TEMPERATURE"])
 
         assert result.exit_code == 0
         assert "21.5" in result.output
-        mock_client_context.get_datapoint.assert_called_once_with("NEQ123", 1, "TEMPERATURE")
+        mock_backend_context.read_value.assert_called_once_with("NEQ123:1", "TEMPERATURE")
 
-    def test_rejects_invalid_path_format(self, runner, mock_client_context):
+    def test_rejects_invalid_path_format(self, runner, mock_backend_context):
         """Should fail with invalid path format."""
         result = runner.invoke(main, ["get", "invalid-path"])
 
@@ -89,44 +90,44 @@ class TestGetCommand:
 class TestSetCommand:
     """Tests for 'ccu set' command."""
 
-    def test_sets_boolean_true(self, runner, mock_client_context):
+    def test_sets_boolean_true(self, runner, mock_backend_context):
         """Should parse and set boolean true."""
-        result = runner.invoke(main, ["set", "NEQ123/1/STATE", "true"])
+        result = runner.invoke(main, ["set", "NEQ123:1/STATE", "true"])
 
         assert result.exit_code == 0
         assert "OK" in result.output
-        mock_client_context.set_datapoint.assert_called_once_with("NEQ123", 1, "STATE", True)
+        mock_backend_context.write_value.assert_called_once_with("NEQ123:1", "STATE", True)
 
-    def test_sets_numeric_value(self, runner, mock_client_context):
+    def test_sets_numeric_value(self, runner, mock_backend_context):
         """Should parse and set numeric values."""
-        result = runner.invoke(main, ["set", "NEQ123/1/LEVEL", "75"])
+        result = runner.invoke(main, ["set", "NEQ123:1/LEVEL", "75"])
 
         assert result.exit_code == 0
-        mock_client_context.set_datapoint.assert_called_once_with("NEQ123", 1, "LEVEL", 75)
+        mock_backend_context.write_value.assert_called_once_with("NEQ123:1", "LEVEL", 75)
 
-    def test_sets_float_value(self, runner, mock_client_context):
+    def test_sets_float_value(self, runner, mock_backend_context):
         """Should parse and set float values."""
-        result = runner.invoke(main, ["set", "NEQ123/1/SETPOINT", "21.5"])
+        result = runner.invoke(main, ["set", "NEQ123:1/SETPOINT", "21.5"])
 
         assert result.exit_code == 0
-        mock_client_context.set_datapoint.assert_called_once_with("NEQ123", 1, "SETPOINT", 21.5)
+        mock_backend_context.write_value.assert_called_once_with("NEQ123:1", "SETPOINT", 21.5)
 
 
 class TestSysvarsCommand:
     """Tests for 'ccu sysvars' command."""
 
-    def test_displays_sysvars_table(self, runner, mock_client_context):
+    def test_displays_sysvars_table(self, runner, mock_backend_context):
         """Should display system variables in a table."""
-        mock_client_context.list_sysvars.return_value = [
-            {"rel": "sysvar", "href": "1234", "title": "Presence"},
-            {"rel": "sysvar", "href": "5678", "title": "AlarmActive"},
+        mock_backend_context.list_sysvars.return_value = [
+            SysVar(name="Presence", value=True, data_type="BOOL", unit=None),
+            SysVar(name="Temperature", value=21.5, data_type="FLOAT", unit="°C"),
         ]
 
         result = runner.invoke(main, ["sysvars"])
 
         assert result.exit_code == 0
         assert "Presence" in result.output
-        assert "AlarmActive" in result.output
+        assert "Temperature" in result.output
 
 
 class TestProgramListCommand:
@@ -283,13 +284,13 @@ class TestProgramDisableCommand:
 
 
 class TestRoomsCommand:
-    """Tests for 'ccu rooms' command (via CCU-Jack)."""
+    """Tests for 'ccu rooms' command (via ReGa)."""
 
-    def test_displays_rooms_table(self, runner, mock_client_context):
+    def test_displays_rooms_table(self, runner, mock_rega_context):
         """Should display rooms in a table."""
-        mock_client_context.list_rooms.return_value = [
-            {"rel": "room", "href": "1234", "title": "Living Room"},
-            {"rel": "room", "href": "5678", "title": "Kitchen"},
+        mock_rega_context.list_rooms.return_value = [
+            {"id": 1234, "name": "Living Room"},
+            {"id": 5678, "name": "Kitchen"},
         ]
 
         result = runner.invoke(main, ["rooms"])
@@ -300,9 +301,9 @@ class TestRoomsCommand:
         assert "5678" in result.output
         assert "Kitchen" in result.output
 
-    def test_handles_empty_room_list(self, runner, mock_client_context):
+    def test_handles_empty_room_list(self, runner, mock_rega_context):
         """Should display empty table when no rooms exist."""
-        mock_client_context.list_rooms.return_value = []
+        mock_rega_context.list_rooms.return_value = []
 
         result = runner.invoke(main, ["rooms"])
 

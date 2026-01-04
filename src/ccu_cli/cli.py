@@ -7,19 +7,19 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from .client import CCUClient
+from .backend import CCUBackend, BackendError
 from .config import load_config
-from .rega import Program, ReGaClient, ReGaError, RoomDevice
+from .rega import Program as ReGaProgram, ReGaClient, ReGaError, RoomDevice
 from .xmlrpc import XMLRPCClient, XMLRPCError
 
 console = Console()
 error_console = Console(stderr=True)
 
 
-def get_client() -> CCUClient:
-    """Create a CCU client with loaded configuration."""
+def get_backend() -> CCUBackend:
+    """Create a CCU backend with loaded configuration."""
     config = load_config()
-    return CCUClient(config)
+    return CCUBackend(config)
 
 
 def get_rega_client() -> ReGaClient:
@@ -44,17 +44,29 @@ def print_json(data: Any) -> None:
 @click.group()
 @click.version_option()
 def main() -> None:
-    """CLI tool for interacting with CCU-Jack on RaspberryMatic/CCU3."""
+    """CLI tool for interacting with RaspberryMatic/CCU3."""
     pass
 
 
 @main.command()
 def info() -> None:
-    """Show CCU-Jack server information."""
-    with get_client() as client:
+    """Show CCU server information."""
+    with get_backend() as backend:
         try:
-            data = client.get_vendor_info()
-            print_json(data)
+            # Show basic info from central
+            table = Table(title="CCU Information")
+            table.add_column("Property", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Host", backend.config.host)
+            table.add_row("Devices", str(len(backend.list_devices())))
+            table.add_row("System Variables", str(len(backend.list_sysvars())))
+            table.add_row("Programs", str(len(backend.list_programs())))
+
+            console.print(table)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -63,35 +75,72 @@ def info() -> None:
 @main.command()
 def devices() -> None:
     """List all devices."""
-    with get_client() as client:
+    with get_backend() as backend:
         try:
-            devices = client.list_devices()
-            # Filter out navigation links
-            devices = [d for d in devices if d.get("rel") == "device"]
+            devices = backend.list_devices()
 
             table = Table(title="Devices")
-            table.add_column("Serial", style="cyan")
+            table.add_column("Address", style="cyan")
             table.add_column("Name", style="green")
+            table.add_column("Model", style="yellow")
+            table.add_column("Available", style="magenta")
 
             for device in devices:
-                serial = device.get("href", "")
-                name = device.get("title", "")
-                table.add_row(serial, name)
+                available = "✓" if device.available else "✗"
+                table.add_row(device.address, device.name, device.model, available)
 
             console.print(table)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
 
 @main.command()
-@click.argument("serial")
-def device(serial: str) -> None:
+@click.argument("address")
+def device(address: str) -> None:
     """Show device details."""
-    with get_client() as client:
+    with get_backend() as backend:
         try:
-            data = client.get_device(serial)
-            print_json(data)
+            dev = backend.get_device(address)
+            if dev is None:
+                error_console.print(f"[red]Error:[/red] Device not found: {address}")
+                sys.exit(1)
+
+            # Device info table
+            info_table = Table(title=f"Device: {dev.name}")
+            info_table.add_column("Property", style="cyan")
+            info_table.add_column("Value", style="green")
+
+            info_table.add_row("Address", dev.address)
+            info_table.add_row("Name", dev.name)
+            info_table.add_row("Model", dev.model)
+            info_table.add_row("Type", dev.device_type)
+            info_table.add_row("Interface", dev.interface)
+            info_table.add_row("Firmware", dev.firmware)
+            info_table.add_row("Available", "Yes" if dev.available else "No")
+
+            console.print(info_table)
+
+            # Channels table
+            channels = backend.get_device_channels(address)
+            if channels:
+                console.print()
+                ch_table = Table(title="Channels")
+                ch_table.add_column("No", style="cyan")
+                ch_table.add_column("Address", style="yellow")
+                ch_table.add_column("Name", style="green")
+
+                for ch in channels:
+                    ch_table.add_row(str(ch.channel_no), ch.address, ch.name)
+
+                console.print(ch_table)
+
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -123,23 +172,28 @@ def rename(channel_id: int, new_name: str) -> None:
 def get(path: str) -> None:
     """Read a datapoint value.
 
-    PATH format: <serial>/<channel>/<datapoint>
-    Example: NEQ0123456/1/TEMPERATURE
+    PATH format: <address>:<channel>/<datapoint>
+    Example: 000A1B2C3D4E5F:1/TEMPERATURE
     """
     try:
-        parts = path.split("/")
-        if len(parts) != 3:
-            raise click.BadParameter("Path must be <serial>/<channel>/<datapoint>")
-        serial, channel, datapoint = parts
-        channel_int = int(channel)
+        # Parse path: address:channel/datapoint
+        if "/" not in path:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_part, datapoint = path.rsplit("/", 1)
+        if ":" not in channel_part:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_address = channel_part
     except ValueError as e:
         error_console.print(f"[red]Error:[/red] Invalid path format: {e}")
         sys.exit(1)
 
-    with get_client() as client:
+    with get_backend() as backend:
         try:
-            value = client.get_datapoint(serial, channel_int, datapoint)
+            value = backend.read_value(channel_address, datapoint)
             console.print(value)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -151,15 +205,17 @@ def get(path: str) -> None:
 def set_value(path: str, value: str) -> None:
     """Set a datapoint value.
 
-    PATH format: <serial>/<channel>/<datapoint>
-    Example: ccu set NEQ0123456/1/STATE true
+    PATH format: <address>:<channel>/<datapoint>
+    Example: ccu set 000A1B2C3D4E5F:1/STATE true
     """
     try:
-        parts = path.split("/")
-        if len(parts) != 3:
-            raise click.BadParameter("Path must be <serial>/<channel>/<datapoint>")
-        serial, channel, datapoint = parts
-        channel_int = int(channel)
+        # Parse path: address:channel/datapoint
+        if "/" not in path:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_part, datapoint = path.rsplit("/", 1)
+        if ":" not in channel_part:
+            raise click.BadParameter("Path must be <address>:<channel>/<datapoint>")
+        channel_address = channel_part
     except ValueError as e:
         error_console.print(f"[red]Error:[/red] Invalid path format: {e}")
         sys.exit(1)
@@ -179,10 +235,13 @@ def set_value(path: str, value: str) -> None:
             except ValueError:
                 parsed_value = value
 
-    with get_client() as client:
+    with get_backend() as backend:
         try:
-            client.set_datapoint(serial, channel_int, datapoint, parsed_value)
+            backend.write_value(channel_address, datapoint, parsed_value)
             console.print(f"[green]OK[/green] {path} = {parsed_value}")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -191,22 +250,28 @@ def set_value(path: str, value: str) -> None:
 @main.command()
 def sysvars() -> None:
     """List all system variables."""
-    with get_client() as client:
+    with get_backend() as backend:
         try:
-            sysvars = client.list_sysvars()
-            # Filter out navigation links
-            sysvars = [s for s in sysvars if s.get("rel") not in ("root", "collection")]
+            sysvars = backend.list_sysvars()
 
             table = Table(title="System Variables")
-            table.add_column("ID", style="cyan")
-            table.add_column("Name", style="green")
+            table.add_column("Name", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_column("Type", style="yellow")
+            table.add_column("Unit", style="magenta")
 
             for sysvar in sysvars:
-                sysvar_id = sysvar.get("href", "")
-                name = sysvar.get("title", "")
-                table.add_row(sysvar_id, name)
+                table.add_row(
+                    sysvar.name,
+                    str(sysvar.value),
+                    sysvar.data_type,
+                    sysvar.unit or "",
+                )
 
             console.print(table)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -466,14 +531,20 @@ def run(name: str) -> None:
 
 
 @main.command()
-@click.argument("serial")
-@click.argument("channel", type=int)
-def config(serial: str, channel: int) -> None:
-    """Show device/channel configuration (MASTER parameters)."""
-    with get_client() as client:
+@click.argument("channel_address")
+def config(channel_address: str) -> None:
+    """Show channel configuration (MASTER parameters).
+
+    CHANNEL_ADDRESS format: <address>:<channel>
+    Example: 000A1B2C3D4E5F:0
+    """
+    with get_backend() as backend:
         try:
-            data = client.get_device_config(serial, channel)
+            data = backend.get_paramset(channel_address)
             print_json(data)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -481,11 +552,14 @@ def config(serial: str, channel: int) -> None:
 
 @main.command()
 def refresh() -> None:
-    """Reload device data from CCU."""
-    with get_client() as client:
+    """Reload hub data (programs, sysvars) from CCU."""
+    with get_backend() as backend:
         try:
-            client.refresh()
-            console.print("[green]OK[/green] CCU-Jack refreshed")
+            backend.refresh_data()
+            console.print("[green]OK[/green] Data refreshed")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -493,23 +567,22 @@ def refresh() -> None:
 
 @main.command()
 def rooms() -> None:
-    """List all rooms (via CCU-Jack)."""
-    with get_client() as client:
+    """List all rooms."""
+    with get_rega_client() as client:
         try:
             rooms = client.list_rooms()
-            # Filter out navigation links
-            rooms = [r for r in rooms if r.get("rel") == "room"]
 
             table = Table(title="Rooms")
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="green")
 
             for room in rooms:
-                room_id = room.get("href", "")
-                name = room.get("title", "")
-                table.add_row(room_id, name)
+                table.add_row(str(room["id"]), room["name"])
 
             console.print(table)
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -522,16 +595,43 @@ def room() -> None:
 
 
 @room.command("show")
-@click.argument("id_or_name")
-def room_show(id_or_name: str) -> None:
-    """Show room details (via CCU-Jack).
+@click.argument("room_id", type=int)
+def room_show(room_id: int) -> None:
+    """Show room details including devices.
 
-    ID_OR_NAME can be a room ID (numeric) or the room name.
+    ROOM_ID: The room's internal ID
     """
-    with get_client() as client:
+    with get_rega_client() as client:
         try:
-            data = client.get_room(id_or_name)
-            print_json(data)
+            # Get room info by listing all rooms and finding the one we want
+            rooms = client.list_rooms()
+            room_info = next((r for r in rooms if r["id"] == room_id), None)
+            if room_info is None:
+                error_console.print(f"[red]Error:[/red] Room not found: {room_id}")
+                sys.exit(1)
+
+            # Show room info
+            console.print(f"[bold]Room:[/bold] {room_info['name']} (ID: {room_id})")
+            console.print()
+
+            # List devices in the room
+            devices = client.list_room_devices(room_id)
+            if devices:
+                table = Table(title="Devices in Room")
+                table.add_column("ID", style="cyan")
+                table.add_column("Name", style="green")
+                table.add_column("Address", style="yellow")
+
+                for device in devices:
+                    table.add_row(str(device.id), device.name, device.address)
+
+                console.print(table)
+            else:
+                console.print("No devices in this room.")
+
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

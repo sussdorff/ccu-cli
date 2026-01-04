@@ -11,7 +11,7 @@ from ccu_cli.rega import Program, ReGaClient, ReGaError, RoomDevice
 @pytest.fixture
 def rega_config() -> CCUConfig:
     """Test configuration for ReGa client."""
-    return CCUConfig(host="test-ccu", port=2121)
+    return CCUConfig(host="test-ccu")
 
 
 @pytest.fixture

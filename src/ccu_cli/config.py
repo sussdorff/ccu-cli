@@ -14,19 +14,12 @@ except ImportError:
 
 @dataclass
 class CCUConfig:
-    """CCU-Jack connection configuration."""
+    """CCU connection configuration."""
 
     host: str = "localhost"
-    port: int = 2121
     https: bool = False
     username: str | None = None
     password: str | None = None
-
-    @property
-    def base_url(self) -> str:
-        """Return the base URL for CCU-Jack API."""
-        scheme = "https" if self.https else "http"
-        return f"{scheme}://{self.host}:{self.port}"
 
     @property
     def auth(self) -> tuple[str, str] | None:
@@ -59,8 +52,6 @@ def load_config() -> CCUConfig:
             ccu_section = toml_config.get("ccu", {})
             if "host" in ccu_section:
                 config.host = ccu_section["host"]
-            if "port" in ccu_section:
-                config.port = int(ccu_section["port"])
             if "https" in ccu_section:
                 config.https = ccu_section["https"]
             if "username" in ccu_section:
@@ -75,8 +66,6 @@ def load_config() -> CCUConfig:
     # 3. Apply environment variables (includes .env values now)
     if env_host := os.environ.get("CCU_HOST"):
         config.host = env_host
-    if env_port := os.environ.get("CCU_PORT"):
-        config.port = int(env_port)
     if env_https := os.environ.get("CCU_HTTPS"):
         config.https = env_https.lower() in ("true", "1", "yes")
     if env_username := os.environ.get("CCU_USERNAME"):

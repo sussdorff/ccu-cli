@@ -12,7 +12,7 @@ from ccu_cli.xmlrpc import DeviceLink, LinkInfo, XMLRPCClient, XMLRPCError
 @pytest.fixture
 def xmlrpc_config() -> CCUConfig:
     """Test configuration for XML-RPC client."""
-    return CCUConfig(host="test-ccu", port=2121)
+    return CCUConfig(host="test-ccu")
 
 
 @pytest.fixture

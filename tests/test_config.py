@@ -12,22 +12,9 @@ class TestCCUConfig:
         config = CCUConfig()
 
         assert config.host == "localhost"
-        assert config.port == 2121
         assert config.https is False
         assert config.username is None
         assert config.password is None
-
-    def test_base_url_http(self):
-        """Should construct HTTP URL."""
-        config = CCUConfig(host="ccu.local", port=8080)
-
-        assert config.base_url == "http://ccu.local:8080"
-
-    def test_base_url_https(self):
-        """Should construct HTTPS URL when enabled."""
-        config = CCUConfig(host="ccu.local", port=443, https=True)
-
-        assert config.base_url == "https://ccu.local:443"
 
     def test_auth_when_credentials_set(self):
         """Should return auth tuple when both credentials set."""
@@ -56,7 +43,6 @@ class TestLoadConfig:
     def test_loads_from_environment(self, monkeypatch):
         """Should load config from environment variables."""
         monkeypatch.setenv("CCU_HOST", "env-ccu.local")
-        monkeypatch.setenv("CCU_PORT", "9999")
         monkeypatch.setenv("CCU_HTTPS", "true")
         monkeypatch.setenv("CCU_USERNAME", "envuser")
         monkeypatch.setenv("CCU_PASSWORD", "envpass")
@@ -64,7 +50,6 @@ class TestLoadConfig:
         config = load_config()
 
         assert config.host == "env-ccu.local"
-        assert config.port == 9999
         assert config.https is True
         assert config.username == "envuser"
         assert config.password == "envpass"
@@ -77,7 +62,6 @@ class TestLoadConfig:
         config_file.write_text("""
 [ccu]
 host = "toml-ccu.local"
-port = 8888
 https = true
 username = "tomluser"
 password = "tomlpass"
@@ -85,7 +69,6 @@ password = "tomlpass"
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         # Clear any env vars that might override
         monkeypatch.delenv("CCU_HOST", raising=False)
-        monkeypatch.delenv("CCU_PORT", raising=False)
         monkeypatch.delenv("CCU_HTTPS", raising=False)
         monkeypatch.delenv("CCU_USERNAME", raising=False)
         monkeypatch.delenv("CCU_PASSWORD", raising=False)
@@ -93,7 +76,6 @@ password = "tomlpass"
         config = load_config()
 
         assert config.host == "toml-ccu.local"
-        assert config.port == 8888
         assert config.https is True
         assert config.username == "tomluser"
         assert config.password == "tomlpass"
@@ -106,7 +88,7 @@ password = "tomlpass"
         config_file.write_text("""
 [ccu]
 host = "toml-ccu.local"
-port = 8888
+https = false
 """)
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         monkeypatch.setenv("CCU_HOST", "env-override.local")
@@ -114,4 +96,4 @@ port = 8888
         config = load_config()
 
         assert config.host == "env-override.local"
-        assert config.port == 8888  # From TOML
+        assert config.https is False  # From TOML
