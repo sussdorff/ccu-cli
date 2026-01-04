@@ -421,3 +421,4 @@ if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
         first_line = result.strip().split("\n")[0].strip()
         if first_line.startswith("ERROR:"):
             raise ReGaError(first_line[6:])
+

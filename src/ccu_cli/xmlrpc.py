@@ -204,3 +204,19 @@ class XMLRPCClient:
         except Exception as e:
             raise XMLRPCError(f"Failed to set link paramset: {e}") from e
 
+    def set_link_info(
+        self, sender: str, receiver: str, name: str, description: str = ""
+    ) -> None:
+        """Set name and description for a device link.
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+            name: New name for the link
+            description: New description for the link (empty string to clear)
+        """
+        try:
+            self.proxy.setLinkInfo(sender, receiver, name, description)
+        except Exception as e:
+            raise XMLRPCError(f"Failed to set link info: {e}") from e
+
