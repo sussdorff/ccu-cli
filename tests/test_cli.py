@@ -34,8 +34,8 @@ def mock_rega_context(mocker):
     return mock
 
 
-class TestDevicesCommand:
-    """Tests for 'ccu devices' command."""
+class TestDeviceListCommand:
+    """Tests for 'ccu device list' command."""
 
     def test_displays_devices_table(self, runner, mock_backend_context):
         """Should display devices in a table."""
@@ -44,7 +44,7 @@ class TestDevicesCommand:
             Device(address="NEQ456", name="Kitchen", model="HmIP-eTRV", device_type="thermostat", interface="HmIP-RF", firmware="1.0.0", available=True),
         ]
 
-        result = runner.invoke(main, ["devices"])
+        result = runner.invoke(main, ["device", "list"])
 
         assert result.exit_code == 0
         assert "NEQ123" in result.output
@@ -59,21 +59,52 @@ class TestDevicesCommand:
             Device(address="NEQ456", name="Offline", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=False),
         ]
 
-        result = runner.invoke(main, ["devices"])
+        result = runner.invoke(main, ["device", "list"])
 
         assert result.exit_code == 0
         assert "✓" in result.output  # Available device
         assert "✗" in result.output  # Unavailable device
 
 
-class TestGetCommand:
-    """Tests for 'ccu get' command."""
+class TestDeviceGetCommand:
+    """Tests for 'ccu device get' command."""
+
+    def test_displays_device_details(self, runner, mock_backend_context):
+        """Should display device details."""
+        mock_backend_context.get_device.return_value = Device(
+            address="NEQ123", name="Living Room Switch", model="HmIP-PSM",
+            device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True
+        )
+        mock_backend_context.get_device_channels.return_value = [
+            Channel(address="NEQ123:0", name="Maintenance", channel_no=0),
+            Channel(address="NEQ123:1", name="Switch", channel_no=1),
+        ]
+
+        result = runner.invoke(main, ["device", "get", "NEQ123"])
+
+        assert result.exit_code == 0
+        assert "NEQ123" in result.output
+        assert "Living Room Switch" in result.output
+        assert "HmIP-PSM" in result.output
+
+    def test_handles_device_not_found(self, runner, mock_backend_context):
+        """Should show error if device not found."""
+        mock_backend_context.get_device.return_value = None
+
+        result = runner.invoke(main, ["device", "get", "nonexistent"])
+
+        assert result.exit_code != 0
+        assert "Device not found" in result.output
+
+
+class TestDatapointGetCommand:
+    """Tests for 'ccu datapoint get' command."""
 
     def test_reads_and_displays_value(self, runner, mock_backend_context):
         """Should display the datapoint value."""
         mock_backend_context.read_value.return_value = 21.5
 
-        result = runner.invoke(main, ["get", "NEQ123:1/TEMPERATURE"])
+        result = runner.invoke(main, ["datapoint", "get", "NEQ123:1/TEMPERATURE"])
 
         assert result.exit_code == 0
         assert "21.5" in result.output
@@ -81,18 +112,18 @@ class TestGetCommand:
 
     def test_rejects_invalid_path_format(self, runner, mock_backend_context):
         """Should fail with invalid path format."""
-        result = runner.invoke(main, ["get", "invalid-path"])
+        result = runner.invoke(main, ["datapoint", "get", "invalid-path"])
 
         assert result.exit_code != 0
         assert "Error" in result.output
 
 
-class TestSetCommand:
-    """Tests for 'ccu set' command."""
+class TestDatapointSetCommand:
+    """Tests for 'ccu datapoint set' command."""
 
     def test_sets_boolean_true(self, runner, mock_backend_context):
         """Should parse and set boolean true."""
-        result = runner.invoke(main, ["set", "NEQ123:1/STATE", "true"])
+        result = runner.invoke(main, ["datapoint", "set", "NEQ123:1/STATE", "true"])
 
         assert result.exit_code == 0
         assert "OK" in result.output
@@ -100,21 +131,21 @@ class TestSetCommand:
 
     def test_sets_numeric_value(self, runner, mock_backend_context):
         """Should parse and set numeric values."""
-        result = runner.invoke(main, ["set", "NEQ123:1/LEVEL", "75"])
+        result = runner.invoke(main, ["datapoint", "set", "NEQ123:1/LEVEL", "75"])
 
         assert result.exit_code == 0
         mock_backend_context.write_value.assert_called_once_with("NEQ123:1", "LEVEL", 75)
 
     def test_sets_float_value(self, runner, mock_backend_context):
         """Should parse and set float values."""
-        result = runner.invoke(main, ["set", "NEQ123:1/SETPOINT", "21.5"])
+        result = runner.invoke(main, ["datapoint", "set", "NEQ123:1/SETPOINT", "21.5"])
 
         assert result.exit_code == 0
         mock_backend_context.write_value.assert_called_once_with("NEQ123:1", "SETPOINT", 21.5)
 
 
-class TestSysvarsCommand:
-    """Tests for 'ccu sysvars' command."""
+class TestSysvarListCommand:
+    """Tests for 'ccu sysvar list' command."""
 
     def test_displays_sysvars_table(self, runner, mock_backend_context):
         """Should display system variables in a table."""
@@ -123,7 +154,7 @@ class TestSysvarsCommand:
             SysVar(name="Temperature", value=21.5, data_type="FLOAT", unit="°C"),
         ]
 
-        result = runner.invoke(main, ["sysvars"])
+        result = runner.invoke(main, ["sysvar", "list"])
 
         assert result.exit_code == 0
         assert "Presence" in result.output
@@ -276,8 +307,8 @@ class TestProgramDisableCommand:
         mock_backend_context.set_program_active.assert_called_once_with("9001", False)
 
 
-class TestRoomsCommand:
-    """Tests for 'ccu rooms' command (via ReGa)."""
+class TestRoomListCommand:
+    """Tests for 'ccu room list' command."""
 
     def test_displays_rooms_table(self, runner, mock_rega_context):
         """Should display rooms in a table."""
@@ -286,7 +317,7 @@ class TestRoomsCommand:
             {"id": 5678, "name": "Kitchen"},
         ]
 
-        result = runner.invoke(main, ["rooms"])
+        result = runner.invoke(main, ["room", "list"])
 
         assert result.exit_code == 0
         assert "1234" in result.output
@@ -298,10 +329,35 @@ class TestRoomsCommand:
         """Should display empty table when no rooms exist."""
         mock_rega_context.list_rooms.return_value = []
 
-        result = runner.invoke(main, ["rooms"])
+        result = runner.invoke(main, ["room", "list"])
 
         assert result.exit_code == 0
         assert "Rooms" in result.output  # Table title still shown
+
+
+class TestRoomGetCommand:
+    """Tests for 'ccu room get' command."""
+
+    def test_displays_room_details(self, runner, mock_rega_context):
+        """Should display room details."""
+        mock_rega_context.list_rooms.return_value = [
+            {"id": 1234, "name": "Living Room"},
+        ]
+        mock_rega_context.list_room_devices.return_value = []
+
+        result = runner.invoke(main, ["room", "get", "1234"])
+
+        assert result.exit_code == 0
+        assert "Living Room" in result.output
+
+    def test_handles_room_not_found(self, runner, mock_rega_context):
+        """Should show error if room not found."""
+        mock_rega_context.list_rooms.return_value = []
+
+        result = runner.invoke(main, ["room", "get", "9999"])
+
+        assert result.exit_code != 0
+        assert "Room not found" in result.output
 
 
 class TestRoomCreateCommand:
@@ -662,3 +718,106 @@ class TestLinkConfigSetCommand:
 
         assert result.exit_code != 0
         assert "Invalid parameter format" in result.output
+
+
+class TestDeviceRenameCommand:
+    """Tests for 'ccu device rename' command."""
+
+    def test_renames_channel(self, runner, mock_rega_context):
+        """Should rename channel and display success message."""
+        result = runner.invoke(main, ["device", "rename", "1234", "New Name"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "New Name" in result.output
+        mock_rega_context.rename_channel.assert_called_once_with(1234, "New Name")
+
+
+class TestDeviceConfigCommand:
+    """Tests for 'ccu device config' command."""
+
+    def test_displays_config_as_json(self, runner, mock_backend_context):
+        """Should display configuration as JSON."""
+        mock_backend_context.get_paramset.return_value = {
+            "TRANSMIT_TRY_MAX": 6,
+            "LOCAL_RESET_DISABLED": False,
+        }
+
+        result = runner.invoke(main, ["device", "config", "NEQ123:0"])
+
+        assert result.exit_code == 0
+        assert "TRANSMIT_TRY_MAX" in result.output
+        mock_backend_context.get_paramset.assert_called_once_with("NEQ123:0")
+
+
+class TestDeviceRefreshCommand:
+    """Tests for 'ccu device refresh' command."""
+
+    def test_refreshes_data(self, runner, mock_backend_context):
+        """Should refresh hub data."""
+        result = runner.invoke(main, ["device", "refresh"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_backend_context.refresh_data.assert_called_once()
+
+
+# Legacy command tests - ensure backwards compatibility
+
+
+class TestLegacyDevicesCommand:
+    """Tests for deprecated 'ccu devices' command."""
+
+    def test_still_works_but_shows_deprecation(self, runner, mock_backend_context):
+        """Should still work but show deprecation notice."""
+        mock_backend_context.list_devices.return_value = [
+            Device(address="NEQ123", name="Test", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True),
+        ]
+
+        result = runner.invoke(main, ["devices"])
+
+        assert result.exit_code == 0
+        assert "NEQ123" in result.output
+        assert "deprecated" in result.output.lower()
+
+
+class TestLegacySysvarsCommand:
+    """Tests for deprecated 'ccu sysvars' command."""
+
+    def test_still_works_but_shows_deprecation(self, runner, mock_backend_context):
+        """Should still work but show deprecation notice."""
+        mock_backend_context.list_sysvars.return_value = [
+            SysVar(name="Test", value=True, data_type="BOOL", unit=None),
+        ]
+
+        result = runner.invoke(main, ["sysvars"])
+
+        assert result.exit_code == 0
+        assert "Test" in result.output
+        assert "deprecated" in result.output.lower()
+
+
+class TestLegacyGetCommand:
+    """Tests for deprecated 'ccu get' command."""
+
+    def test_still_works_but_shows_deprecation(self, runner, mock_backend_context):
+        """Should still work but show deprecation notice."""
+        mock_backend_context.read_value.return_value = 21.5
+
+        result = runner.invoke(main, ["get", "NEQ123:1/TEMPERATURE"])
+
+        assert result.exit_code == 0
+        assert "21.5" in result.output
+        assert "deprecated" in result.output.lower()
+
+
+class TestLegacySetCommand:
+    """Tests for deprecated 'ccu set' command."""
+
+    def test_still_works_but_shows_deprecation(self, runner, mock_backend_context):
+        """Should still work but show deprecation notice."""
+        result = runner.invoke(main, ["set", "NEQ123:1/STATE", "true"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "deprecated" in result.output.lower()
