@@ -57,30 +57,52 @@ CCU_PASSWORD=secret
 
 ## Usage
 
-```bash
-# Show CCU info
-ccu info
+The CLI follows a kubectl-style `resource action` pattern.
 
+### Device Management
+
+```bash
 # List all devices
-ccu devices
+ccu device list
 
 # Show device details
-ccu device <address>
+ccu device get <address>
 
-# Read a datapoint
-ccu get <address>:<channel>/<datapoint>
+# Rename a channel
+ccu device rename <channel-id> <new-name>
 
-# Set a datapoint
-ccu set <address>:<channel>/<datapoint> <value>
+# Show channel configuration (MASTER paramset)
+ccu device config <address>:<channel>
 
+# Refresh hub data (programs, sysvars) from CCU
+ccu device refresh
+```
+
+### Datapoints
+
+```bash
+# Read a datapoint value
+ccu datapoint get <address>:<channel>/<datapoint>
+
+# Set a datapoint value
+ccu datapoint set <address>:<channel>/<datapoint> <value>
+```
+
+### System Variables
+
+```bash
 # List system variables
-ccu sysvars
+ccu sysvar list
+```
 
+### Programs
+
+```bash
 # List programs
 ccu program list
 
 # Show program details
-ccu program show <id-or-name>
+ccu program get <id-or-name>
 
 # Run a program
 ccu program run <id-or-name>
@@ -89,30 +111,64 @@ ccu program run <id-or-name>
 ccu program enable <id-or-name>
 ccu program disable <id-or-name>
 
+# Delete a program
+ccu program delete <id-or-name> [--yes]
+```
+
+### Rooms
+
+```bash
 # List rooms
-ccu rooms
+ccu room list
 
-# Manage rooms
+# Show room details and devices
+ccu room get <room-id>
+
+# Create a room
 ccu room create <name>
-ccu room rename <id> <new-name>
-ccu room delete <id>
 
-# List device links
-ccu link list [address]
+# Rename a room
+ccu room rename <room-id> <new-name>
+
+# Delete a room
+ccu room delete <room-id> [--yes]
+
+# Manage devices in rooms
+ccu room add-device <room-id> <channel-id>
+ccu room remove-device <room-id> <channel-id>
+ccu room devices <room-id>
+```
+
+### Device Links (Direktverknüpfungen)
+
+```bash
+# List all links (optionally filter by address)
+ccu link list [-a <address>]
 
 # Show link details
 ccu link get <sender> <receiver>
 
-# Create/delete links
+# Create a link
 ccu link create <sender> <receiver> [--name "Link Name"]
-ccu link delete <sender> <receiver>
+
+# Delete a link
+ccu link delete <sender> <receiver> [--yes]
 
 # Get link parameters (queries both sender and receiver sides)
 ccu link config get <sender> <receiver>
 
-# Set link parameters
+# Set link parameters (default: receiver/actuator side)
 ccu link config set <sender> <receiver> PARAM=value [PARAM2=value2 ...]
-ccu link config set --side sender <sender> <receiver> PARAM=value  # for button profiles
+
+# Set parameters on sender/button side
+ccu link config set --side sender <sender> <receiver> PARAM=value
+```
+
+### Other Commands
+
+```bash
+# Show CCU info
+ccu info
 ```
 
 ## Development
