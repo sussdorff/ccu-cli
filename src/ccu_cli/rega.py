@@ -50,9 +50,11 @@ class ReGaClient:
 
     @property
     def base_url(self) -> str:
-        """Return the base URL for ReGa API."""
-        scheme = "https" if self.config.https else "http"
-        return f"{scheme}://{self.config.host}:{self.REGA_PORT}"
+        """Return the base URL for ReGa API.
+
+        Note: ReGa API always uses HTTP on port 8181, regardless of main CCU HTTPS setting.
+        """
+        return f"http://{self.config.host}:{self.REGA_PORT}"
 
     @property
     def client(self) -> httpx.Client:
@@ -62,6 +64,7 @@ class ReGaClient:
                 base_url=self.base_url,
                 auth=self.config.auth,
                 timeout=30.0,
+                verify=False,  # Allow self-signed certs
             )
         return self._client
 

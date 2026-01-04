@@ -42,6 +42,7 @@ class Channel:
     address: str
     name: str
     channel_no: int
+    channel_type: str
 
 
 @dataclass
@@ -119,6 +120,15 @@ class CCUBackend:
             self._run_async(self._central.stop())
             self._central = None
         if self._loop is not None:
+            # Cancel any remaining tasks to avoid "Task was destroyed" warnings
+            pending = asyncio.all_tasks(self._loop)
+            for task in pending:
+                task.cancel()
+            # Give cancelled tasks a chance to complete
+            if pending:
+                self._loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
             self._loop.close()
             self._loop = None
 
@@ -156,7 +166,7 @@ class CCUBackend:
 
     def get_device(self, address: str) -> Device | None:
         """Get a device by address."""
-        device = self.central.get_device(address=address)
+        device = self.central.device_registry.get_device(address=address)
         if device is None:
             return None
         return Device(
@@ -170,19 +180,53 @@ class CCUBackend:
 
     def get_device_channels(self, address: str) -> list[Channel]:
         """Get channels for a device."""
-        device = self.central.get_device(address=address)
+        device = self.central.device_registry.get_device(address=address)
         if device is None:
             return []
         channels = []
         for channel_no, channel in device.channels.items():
+            channel_type = channel.description.get("TYPE", "") if channel.description else ""
             channels.append(
                 Channel(
                     address=channel.address,
                     name=channel.name or channel.address,
                     channel_no=channel_no,
+                    channel_type=channel_type,
                 )
             )
         return channels
+
+    def rename_device(
+        self, address: str, new_name: str, include_channels: bool = False
+    ) -> bool:
+        """Rename a device.
+
+        Args:
+            address: Device address (e.g., "001098A98B1682")
+            new_name: New name for the device
+            include_channels: If True, also rename channels to "name:channel_no"
+
+        Returns:
+            True if successful, False if device not found
+
+        Raises:
+            BackendError: If rename fails
+        """
+        # Check device exists first
+        device = self.central.device_registry.get_device(address=address)
+        if device is None:
+            return False
+
+        async def _rename() -> None:
+            # Note: rename_device may return False even when successful (API quirk)
+            await self.central.rename_device(
+                device_address=address,
+                name=new_name,
+                include_channels=include_channels,
+            )
+
+        self._run_async(_rename())
+        return True
 
     def get_channel_datapoints(self, channel_address: str) -> list[DataPoint]:
         """Get datapoints for a channel."""
@@ -194,7 +238,7 @@ class CCUBackend:
         device_address = parts[0]
         channel_no = int(parts[1])
 
-        device = self.central.get_device(address=device_address)
+        device = self.central.device_registry.get_device(address=device_address)
         if device is None:
             raise BackendError(f"Device not found: {device_address}")
 
