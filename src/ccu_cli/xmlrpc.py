@@ -1,7 +1,6 @@
 """XML-RPC API client for CCU.
 
-Used for operations not available via CCU-Jack or ReGa, such as
-managing Direktverknüpfungen (direct device links).
+Used for managing Direktverknüpfungen (direct device links).
 
 Ports:
 - 2001: BidCos-RF (legacy HomeMatic devices)
@@ -46,8 +45,7 @@ class LinkInfo:
 class XMLRPCClient:
     """Client for CCU XML-RPC API.
 
-    Provides access to device linking operations not available
-    through CCU-Jack or ReGa.
+    Provides access to device linking operations.
 
     Supports two interfaces:
     - BidCos-RF (port 2001): For legacy HomeMatic devices

@@ -38,7 +38,7 @@ class Program:
 class ReGaClient:
     """Client for CCU ReGa Script API (port 8181).
 
-    Used for operations not available via CCU-Jack, such as
+    Used for operations not available via aiohomematic, such as
     creating, renaming, and deleting rooms.
     """
 

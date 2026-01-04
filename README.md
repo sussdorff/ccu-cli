@@ -1,40 +1,12 @@
 # ccu-cli
 
-CLI tool for interacting with [CCU-Jack](https://github.com/mdzio/ccu-jack) on RaspberryMatic/CCU3.
-
-## Prerequisites
-
-### CCU-Jack Installation on RaspberryMatic
-
-1. Download the latest addon from [CCU-Jack Releases](https://github.com/mdzio/ccu-jack/releases)
-   - File: `ccu-jack-ccu-addon-x.x.x.tar.gz`
-
-2. Install via RaspberryMatic Web UI:
-   - Navigate to: **Einstellungen** > **Systemsteuerung** > **Zusatzsoftware**
-   - Click **Durchsuchen** and select the downloaded `.tar.gz` file
-   - Click **Installieren**
-
-3. After installation, CCU-Jack runs on:
-   - HTTP: `http://<ccu-ip>:2121`
-   - HTTPS: `https://<ccu-ip>:2122`
-
-4. Verify installation:
-   ```bash
-   curl -s "http://<ccu-ip>:2121/~vendor" | jq
-   ```
-
-### CCU-Jack Configuration (Optional)
-
-Access the CCU-Jack web UI at `http://<ccu-ip>:2121` to:
-- Configure authentication (recommended for security)
-- Enable/disable MQTT server
-- Set up virtual devices
+CLI tool for interacting with RaspberryMatic/CCU3 via [aiohomematic](https://github.com/danielperna84/hahomematic).
 
 ## Installation
 
 ```bash
-# Clone with submodules
-git clone --recurse-submodules https://github.com/<user>/ccu-cli.git
+# Clone repository
+git clone https://github.com/<user>/ccu-cli.git
 cd ccu-cli
 
 # Install with uv
@@ -57,7 +29,6 @@ Configuration is loaded in the following order (later sources override earlier):
 ```toml
 [ccu]
 host = "raspberrymatic.local"
-port = 2121
 https = false
 
 # Optional authentication
@@ -69,7 +40,7 @@ https = false
 
 ```bash
 export CCU_HOST="raspberrymatic.local"
-export CCU_PORT="2121"
+export CCU_HTTPS="false"
 export CCU_USERNAME="admin"
 export CCU_PASSWORD="secret"
 ```
@@ -80,7 +51,6 @@ For local development, create a `.env` file in the project root:
 
 ```bash
 CCU_HOST=raspberrymatic.local
-CCU_PORT=2121
 CCU_USERNAME=admin
 CCU_PASSWORD=secret
 ```
@@ -88,26 +58,44 @@ CCU_PASSWORD=secret
 ## Usage
 
 ```bash
+# Show CCU info
+ccu info
+
 # List all devices
 ccu devices
 
 # Show device details
-ccu device <serial>
+ccu device <address>
 
 # Read a datapoint
-ccu get <serial>/<channel>/<datapoint>
+ccu get <address>:<channel>/<datapoint>
 
 # Set a datapoint
-ccu set <serial>/<channel>/<datapoint> <value>
+ccu set <address>:<channel>/<datapoint> <value>
 
 # List system variables
 ccu sysvars
 
 # List programs
-ccu programs
+ccu program list
 
-# Execute a program
-ccu run <program-name>
+# Show program details
+ccu program show <id-or-name>
+
+# Run a program
+ccu program run <id-or-name>
+
+# Enable/disable a program
+ccu program enable <id-or-name>
+ccu program disable <id-or-name>
+
+# List rooms
+ccu rooms
+
+# Manage rooms
+ccu room create <name>
+ccu room rename <id> <new-name>
+ccu room delete <id>
 ```
 
 ## Development
@@ -122,14 +110,6 @@ uv run pytest
 # Run CLI directly
 uv run ccu --help
 ```
-
-## Documentation
-
-CCU-Jack documentation is included as a git submodule in `docs/ccu-jack/`.
-
-- [CCU-Jack Wiki](https://github.com/mdzio/ccu-jack/wiki)
-- [REST API (VEAP)](https://github.com/mdzio/ccu-jack/wiki/VEAP-Dienste)
-- [CURL Examples](https://github.com/mdzio/ccu-jack/wiki/CURL)
 
 ## License
 

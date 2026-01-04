@@ -4,7 +4,7 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 
 ## aiohomematic Documentation
 
-This project uses [hahomematic](https://github.com/SukramJ/hahomematic) (formerly aiohomematic) as the backend library for CCU communication. Local documentation is synced to `llms/aiohomematic/` for agent context.
+This project uses [aiohomematic](https://github.com/danielperna84/hahomematic) as the backend library for CCU communication. Local documentation is synced to `llms/aiohomematic/` for agent context.
 
 **Key docs:**
 - `llms/aiohomematic/getting_started.md` - Basic usage patterns
@@ -16,7 +16,7 @@ This project uses [hahomematic](https://github.com/SukramJ/hahomematic) (formerl
 
 **To update docs:** `./llms/sync.sh`
 
-Read these docs before implementing features that interact with hahomematic.
+Read these docs before implementing features that interact with aiohomematic.
 
 ## Testing Strategy: Test-Driven Development
 
@@ -33,40 +33,41 @@ Read these docs before implementing features that interact with hahomematic.
 
 | Layer | Approach | Tools |
 |-------|----------|-------|
-| `CCUClient` | Mock HTTP responses | `httpx.MockTransport` |
-| CLI commands | Invoke CLI, mock client | `click.testing.CliRunner` |
+| `CCUBackend` | Mock backend | `unittest.mock` |
+| CLI commands | Invoke CLI, mock backend | `click.testing.CliRunner` |
 | Config | Temp files, env vars | `monkeypatch`, `tmp_path` |
+| ReGa | Mock HTTP responses | `httpx.MockTransport` |
 
 ### Test Structure
 
 ```
 tests/
 ├── conftest.py          # Shared fixtures
-├── fixtures/            # Sample CCU-Jack API responses
-│   ├── devices.json
-│   └── sysvars.json
-├── test_client.py       # CCUClient with MockTransport
 ├── test_cli.py          # CLI commands via CliRunner
-└── test_config.py       # Config loading
+├── test_config.py       # Config loading
+├── test_rega.py         # ReGa client tests
+└── test_xmlrpc.py       # XML-RPC client tests
 ```
 
 ### Key Patterns
 
-**Mocking the HTTP layer:**
+**Mocking the backend:**
 ```python
-from httpx import MockTransport, Response
+from unittest.mock import MagicMock
+from ccu_cli.backend import Device
 
-def test_list_devices():
-    def handler(request):
-        assert request.url.path == "/device"
-        return Response(200, json={"~links": [{"rel": "device", "href": "NEQ123"}]})
+def test_devices_command(mocker):
+    mock = MagicMock()
+    mock.__enter__ = MagicMock(return_value=mock)
+    mock.__exit__ = MagicMock(return_value=False)
+    mock.list_devices.return_value = [
+        Device(address="NEQ123", name="Switch", model="HmIP-PSM", ...)
+    ]
+    mocker.patch("ccu_cli.cli.get_backend", return_value=mock)
 
-    config = CCUConfig(host="test", port=1234)
-    client = CCUClient(config)
-    client._client = httpx.Client(transport=MockTransport(handler))
-
-    devices = client.list_devices()
-    assert devices[0]["href"] == "NEQ123"
+    runner = CliRunner()
+    result = runner.invoke(main, ["devices"])
+    assert result.exit_code == 0
 ```
 
 **Testing CLI commands:**
@@ -75,7 +76,7 @@ from click.testing import CliRunner
 from ccu_cli.cli import main
 
 def test_devices_command(mocker):
-    mocker.patch("ccu_cli.cli.get_client", return_value=mock_client)
+    mocker.patch("ccu_cli.cli.get_backend", return_value=mock_backend)
     runner = CliRunner()
     result = runner.invoke(main, ["devices"])
     assert result.exit_code == 0
@@ -93,8 +94,8 @@ uv run pytest -k "test_devices"  # Pattern match
 ### What NOT to Test
 
 - Don't mock internal implementation details
-- Don't test httpx/click library behavior
-- Don't create a full CCU-Jack mock server (MockTransport is sufficient)
+- Don't test library behavior
+- Don't create full mock servers (MockTransport is sufficient for HTTP)
 
 ## Quick Reference
 
@@ -131,4 +132,3 @@ bd sync               # Sync with git
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-

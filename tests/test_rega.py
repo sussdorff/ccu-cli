@@ -33,7 +33,7 @@ class TestReGaClientInit:
     """Tests for ReGaClient initialization."""
 
     def test_uses_port_8181(self, rega_config):
-        """Should use ReGa port 8181, not CCU-Jack port."""
+        """Should use ReGa port 8181."""
         client = ReGaClient(rega_config)
         assert ":8181" in client.base_url
 
