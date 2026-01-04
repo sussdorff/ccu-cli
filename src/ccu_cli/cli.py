@@ -609,15 +609,13 @@ def room_get(room_id: int) -> None:
     """
     with get_rega_client() as client:
         try:
-            # Get room info by listing all rooms and finding the one we want
-            rooms = client.list_rooms()
-            room_info = next((r for r in rooms if r["id"] == room_id), None)
-            if room_info is None:
-                error_console.print(f"[red]Error:[/red] Room not found: {room_id}")
-                sys.exit(1)
+            # Get room info including description
+            room_info = client.get_room(room_id)
 
             # Show room info
             console.print(f"[bold]Room:[/bold] {room_info['name']} (ID: {room_id})")
+            if room_info.get("description") and room_info["description"] != room_info["name"]:
+                console.print(f"[dim]Description:[/dim] {room_info['description']}")
             console.print()
 
             # List devices in the room
@@ -635,6 +633,27 @@ def room_get(room_id: int) -> None:
             else:
                 console.print("No devices in this room.")
 
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("describe")
+@click.argument("room_id", type=int)
+@click.argument("description")
+def room_describe(room_id: int, description: str) -> None:
+    """Set room description.
+
+    ROOM_ID: The room's internal ID
+    DESCRIPTION: New description for the room
+    """
+    with get_rega_client() as client:
+        try:
+            client.set_room_description(room_id, description)
+            console.print(f"[green]OK[/green] Set description for room {room_id}")
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

@@ -100,6 +100,65 @@ class ReGaClient:
         response.raise_for_status()
         return response.text
 
+    def get_room(self, room_id: int) -> dict[str, Any]:
+        """Get room details including description.
+
+        Args:
+            room_id: ID of the room
+
+        Returns:
+            Dict with id, name, description
+
+        Raises:
+            ReGaError: If room not found
+        """
+        script = f"""
+object room = dom.GetObject({room_id});
+if (room) {{
+    WriteLine(room.ID());
+    WriteLine(room.Name());
+    WriteLine(room.EnumInfo());
+}} else {{
+    WriteLine("ERROR:Room not found");
+}}
+"""
+        result = self.execute(script)
+        lines = result.strip().split("\n")
+        first_line = lines[0].strip() if lines else ""
+        if first_line.startswith("ERROR:"):
+            raise ReGaError(first_line[6:])
+        if len(lines) >= 3:
+            return {
+                "id": int(lines[0].strip()),
+                "name": lines[1].strip(),
+                "description": lines[2].strip(),
+            }
+        raise ReGaError(f"Unexpected response: {result}")
+
+    def set_room_description(self, room_id: int, description: str) -> None:
+        """Set room description.
+
+        Args:
+            room_id: ID of the room
+            description: New description for the room
+
+        Raises:
+            ReGaError: If room not found
+        """
+        script = f"""
+object room = dom.GetObject({room_id});
+if (room) {{
+    room.EnumInfo("{description}");
+    WriteLine("OK");
+}} else {{
+    WriteLine("ERROR:Room not found");
+}}
+"""
+        result = self.execute(script)
+        first_line = result.strip().split("\n")[0].strip()
+        if first_line.startswith("ERROR:"):
+            raise ReGaError(first_line[6:])
+
     def rename_room(self, room_id: int, new_name: str) -> None:
         """Rename an existing room.
 
