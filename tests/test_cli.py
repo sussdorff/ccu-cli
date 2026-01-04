@@ -40,8 +40,8 @@ class TestDeviceListCommand:
     def test_displays_devices_table(self, runner, mock_backend_context):
         """Should display devices in a table."""
         mock_backend_context.list_devices.return_value = [
-            Device(address="NEQ123", name="Living Room", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True),
-            Device(address="NEQ456", name="Kitchen", model="HmIP-eTRV", device_type="thermostat", interface="HmIP-RF", firmware="1.0.0", available=True),
+            Device(address="NEQ123", name="Living Room", model="HmIP-PSM", interface="HmIP-RF", firmware="1.0.0", available=True),
+            Device(address="NEQ456", name="Kitchen", model="HmIP-eTRV", interface="HmIP-RF", firmware="1.0.0", available=True),
         ]
 
         result = runner.invoke(main, ["device", "list"])
@@ -55,8 +55,8 @@ class TestDeviceListCommand:
     def test_shows_availability_status(self, runner, mock_backend_context):
         """Should show availability status."""
         mock_backend_context.list_devices.return_value = [
-            Device(address="NEQ123", name="Switch", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True),
-            Device(address="NEQ456", name="Offline", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=False),
+            Device(address="NEQ123", name="Switch", model="HmIP-PSM", interface="HmIP-RF", firmware="1.0.0", available=True),
+            Device(address="NEQ456", name="Offline", model="HmIP-PSM", interface="HmIP-RF", firmware="1.0.0", available=False),
         ]
 
         result = runner.invoke(main, ["device", "list"])
@@ -73,7 +73,7 @@ class TestDeviceGetCommand:
         """Should display device details."""
         mock_backend_context.get_device.return_value = Device(
             address="NEQ123", name="Living Room Switch", model="HmIP-PSM",
-            device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True
+            interface="HmIP-RF", firmware="1.0.0", available=True
         )
         mock_backend_context.get_device_channels.return_value = [
             Channel(address="NEQ123:0", name="Maintenance", channel_no=0),
@@ -771,7 +771,7 @@ class TestLegacyDevicesCommand:
     def test_still_works_but_shows_deprecation(self, runner, mock_backend_context):
         """Should still work but show deprecation notice."""
         mock_backend_context.list_devices.return_value = [
-            Device(address="NEQ123", name="Test", model="HmIP-PSM", device_type="switch", interface="HmIP-RF", firmware="1.0.0", available=True),
+            Device(address="NEQ123", name="Test", model="HmIP-PSM", interface="HmIP-RF", firmware="1.0.0", available=True),
         ]
 
         result = runner.invoke(main, ["devices"])

@@ -30,7 +30,6 @@ class Device:
     address: str
     name: str
     model: str
-    device_type: str
     interface: str
     firmware: str
     available: bool
@@ -148,7 +147,6 @@ class CCUBackend:
                     address=device.address,
                     name=device.name or device.address,
                     model=device.model or "",
-                    device_type=device.device_type or "",
                     interface=str(device.interface) if device.interface else "",
                     firmware=device.firmware or "",
                     available=device.available,
@@ -165,7 +163,6 @@ class CCUBackend:
             address=device.address,
             name=device.name or device.address,
             model=device.model or "",
-            device_type=device.device_type or "",
             interface=str(device.interface) if device.interface else "",
             firmware=device.firmware or "",
             available=device.available,
@@ -273,7 +270,7 @@ class CCUBackend:
     def list_sysvars(self) -> list[SysVar]:
         """List all system variables."""
         sysvars = []
-        for sysvar in self.central.hub_coordinator.sysvar_data_points.values():
+        for sysvar in self.central.hub_coordinator.sysvar_data_points:
             sysvars.append(
                 SysVar(
                     name=sysvar.name,
