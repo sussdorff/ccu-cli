@@ -5,7 +5,7 @@ import httpx
 from httpx import MockTransport, Response
 
 from ccu_cli.config import CCUConfig
-from ccu_cli.rega import Program, ReGaClient, ReGaError, RoomDevice
+from ccu_cli.rega import ReGaClient, ReGaError, RoomDevice
 
 
 @pytest.fixture
@@ -407,143 +407,9 @@ class TestReGaClientContextManager:
         assert client._client is None
 
 
-class TestListPrograms:
-    """Tests for ReGaClient.list_programs()."""
-
-    def test_returns_program_list(self, mock_rega_client):
-        """Should parse semicolon-separated program list."""
-
-        def handler(request):
-            return Response(
-                200,
-                text="1001;All Lights Off;Turn off all lights;true;true;1704067200\n1002;Morning Routine;;false;true;0\n<xml>...",
-            )
-
-        client = mock_rega_client(handler)
-        programs = client.list_programs()
-
-        assert len(programs) == 2
-        assert programs[0] == Program(
-            id=1001,
-            name="All Lights Off",
-            description="Turn off all lights",
-            active=True,
-            visible=True,
-            last_execute_time=1704067200,
-        )
-        assert programs[1] == Program(
-            id=1002,
-            name="Morning Routine",
-            description="",
-            active=False,
-            visible=True,
-            last_execute_time=0,
-        )
-
-    def test_handles_empty_program_list(self, mock_rega_client):
-        """Should return empty list when no programs exist."""
-
-        def handler(request):
-            return Response(200, text="<xml>...</xml>")
-
-        client = mock_rega_client(handler)
-        programs = client.list_programs()
-
-        assert programs == []
-
-
-class TestGetProgram:
-    """Tests for ReGaClient.get_program()."""
-
-    def test_returns_program_by_id(self, mock_rega_client):
-        """Should return program details when found."""
-
-        def handler(request):
-            return Response(
-                200,
-                text="1001;All Lights Off;Turn off all lights;true;true;1704067200\n<xml>...",
-            )
-
-        client = mock_rega_client(handler)
-        program = client.get_program(1001)
-
-        assert program is not None
-        assert program.id == 1001
-        assert program.name == "All Lights Off"
-        assert program.description == "Turn off all lights"
-        assert program.active is True
-
-    def test_returns_none_when_not_found(self, mock_rega_client):
-        """Should return None when program not found."""
-
-        def handler(request):
-            return Response(200, text="ERROR:Program not found\n<xml>...")
-
-        client = mock_rega_client(handler)
-        program = client.get_program(9999)
-
-        assert program is None
-
-
-class TestGetProgramByName:
-    """Tests for ReGaClient.get_program_by_name()."""
-
-    def test_returns_program_by_name(self, mock_rega_client):
-        """Should return program details when found by name."""
-
-        def handler(request):
-            body = request.read().decode()
-            assert 'Get("All Lights Off")' in body
-            return Response(
-                200,
-                text="1001;All Lights Off;Turn off all lights;true;true;1704067200\n<xml>...",
-            )
-
-        client = mock_rega_client(handler)
-        program = client.get_program_by_name("All Lights Off")
-
-        assert program is not None
-        assert program.name == "All Lights Off"
-
-    def test_returns_none_when_not_found(self, mock_rega_client):
-        """Should return None when program not found by name."""
-
-        def handler(request):
-            return Response(200, text="ERROR:Program not found\n<xml>...")
-
-        client = mock_rega_client(handler)
-        program = client.get_program_by_name("NonExistent")
-
-        assert program is None
-
-
-class TestRunProgram:
-    """Tests for ReGaClient.run_program()."""
-
-    def test_executes_program(self, mock_rega_client):
-        """Should execute program by ID."""
-        captured = {}
-
-        def handler(request):
-            captured["body"] = request.read().decode()
-            return Response(200, text="OK\n<xml>...</xml>")
-
-        client = mock_rega_client(handler)
-        client.run_program(1001)
-
-        assert "dom.GetObject(1001)" in captured["body"]
-        assert "ProgramExecute()" in captured["body"]
-
-    def test_raises_on_not_found(self, mock_rega_client):
-        """Should raise ReGaError when program not found."""
-
-        def handler(request):
-            return Response(200, text="ERROR:Program not found\n<xml>...")
-
-        client = mock_rega_client(handler)
-
-        with pytest.raises(ReGaError, match="Program not found"):
-            client.run_program(9999)
+# Note: Program list, get, get_by_name, run, and set_active operations
+# have been migrated to aiohomematic via CCUBackend.
+# Only delete_program remains in ReGaClient.
 
 
 class TestDeleteProgram:
@@ -573,46 +439,3 @@ class TestDeleteProgram:
 
         with pytest.raises(ReGaError, match="Program not found"):
             client.delete_program(9999)
-
-
-class TestSetProgramActive:
-    """Tests for ReGaClient.set_program_active()."""
-
-    def test_enables_program(self, mock_rega_client):
-        """Should enable program."""
-        captured = {}
-
-        def handler(request):
-            captured["body"] = request.read().decode()
-            return Response(200, text="OK\n<xml>...</xml>")
-
-        client = mock_rega_client(handler)
-        client.set_program_active(1001, True)
-
-        assert "dom.GetObject(1001)" in captured["body"]
-        assert "Active(true)" in captured["body"]
-
-    def test_disables_program(self, mock_rega_client):
-        """Should disable program."""
-        captured = {}
-
-        def handler(request):
-            captured["body"] = request.read().decode()
-            return Response(200, text="OK\n<xml>...</xml>")
-
-        client = mock_rega_client(handler)
-        client.set_program_active(1001, False)
-
-        assert "dom.GetObject(1001)" in captured["body"]
-        assert "Active(false)" in captured["body"]
-
-    def test_raises_on_not_found(self, mock_rega_client):
-        """Should raise ReGaError when program not found."""
-
-        def handler(request):
-            return Response(200, text="ERROR:Program not found\n<xml>...")
-
-        client = mock_rega_client(handler)
-
-        with pytest.raises(ReGaError, match="Program not found"):
-            client.set_program_active(9999, True)

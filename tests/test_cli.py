@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock
 
 from ccu_cli.cli import main
-from ccu_cli.backend import Device, Channel, DataPoint, SysVar, Program as BackendProgram
+from ccu_cli.backend import Channel, DataPoint, Device, Program as BackendProgram, SysVar
 
 
 @pytest.fixture
@@ -133,12 +133,10 @@ class TestSysvarsCommand:
 class TestProgramListCommand:
     """Tests for 'ccu program list' command."""
 
-    def test_displays_programs_table(self, runner, mock_rega_context):
+    def test_displays_programs_table(self, runner, mock_backend_context):
         """Should display programs in a table."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.list_programs.return_value = [
-            Program(id=9001, name="All Lights Off", description="", active=True, visible=True, last_execute_time=0),
+        mock_backend_context.list_programs.return_value = [
+            BackendProgram(pid="9001", name="All Lights Off", is_active=True, is_internal=False, last_execute_time=None),
         ]
 
         result = runner.invoke(main, ["program", "list"])
@@ -147,113 +145,110 @@ class TestProgramListCommand:
         assert "All Lights Off" in result.output
         assert "9001" in result.output
 
+    def test_skips_internal_programs(self, runner, mock_backend_context):
+        """Should skip internal programs by default."""
+        mock_backend_context.list_programs.return_value = [
+            BackendProgram(pid="9001", name="User Program", is_active=True, is_internal=False, last_execute_time=None),
+            BackendProgram(pid="9002", name="Internal Program", is_active=True, is_internal=True, last_execute_time=None),
+        ]
 
-class TestProgramShowCommand:
-    """Tests for 'ccu program show' command."""
+        result = runner.invoke(main, ["program", "list"])
 
-    def test_displays_program_details(self, runner, mock_rega_context):
+        assert result.exit_code == 0
+        assert "User Program" in result.output
+        assert "Internal Program" not in result.output
+
+
+class TestProgramGetCommand:
+    """Tests for 'ccu program get' command."""
+
+    def test_displays_program_details(self, runner, mock_backend_context):
         """Should display program details."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="All Lights Off", description="Turn off all lights", active=True, visible=True, last_execute_time=1704067200
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="All Lights Off", is_active=True, is_internal=False, last_execute_time=None
         )
 
-        result = runner.invoke(main, ["program", "show", "9001"])
+        result = runner.invoke(main, ["program", "get", "9001"])
 
         assert result.exit_code == 0
         assert "All Lights Off" in result.output
-        assert "Turn off all lights" in result.output
         assert "Yes" in result.output  # Active
 
-    def test_resolves_by_name(self, runner, mock_rega_context):
-        """Should resolve program by name."""
-        from ccu_cli.rega import Program
+    def test_handles_program_not_found(self, runner, mock_backend_context):
+        """Should show error if program not found."""
+        mock_backend_context.get_program.return_value = None
 
-        mock_rega_context.get_program.return_value = None  # ID lookup fails
-        mock_rega_context.get_program_by_name.return_value = Program(
-            id=9001, name="AllLightsOff", description="", active=True, visible=True, last_execute_time=0
-        )
+        result = runner.invoke(main, ["program", "get", "nonexistent"])
 
-        result = runner.invoke(main, ["program", "show", "AllLightsOff"])
-
-        assert result.exit_code == 0
-        assert "AllLightsOff" in result.output
+        assert result.exit_code != 0
+        assert "Program not found" in result.output
 
 
 class TestProgramRunCommand:
     """Tests for 'ccu program run' command."""
 
-    def test_executes_program(self, runner, mock_rega_context):
+    def test_executes_program(self, runner, mock_backend_context):
         """Should execute the program."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="AllLightsOff", description="", active=True, visible=True, last_execute_time=0
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="AllLightsOff", is_active=True, is_internal=False, last_execute_time=None
         )
 
         result = runner.invoke(main, ["program", "run", "9001"])
 
         assert result.exit_code == 0
         assert "OK" in result.output
-        mock_rega_context.run_program.assert_called_once_with(9001)
+        mock_backend_context.run_program.assert_called_once_with("9001")
 
 
 class TestProgramDeleteCommand:
     """Tests for 'ccu program delete' command."""
 
-    def test_deletes_program_with_confirmation(self, runner, mock_rega_context):
+    def test_deletes_program_with_confirmation(self, runner, mock_backend_context):
         """Should delete program after confirmation."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="Test Program", description="", active=True, visible=True, last_execute_time=0
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="Test Program", is_active=True, is_internal=False, last_execute_time=None
         )
+        mock_backend_context.delete_program.return_value = "Test Program"
 
         result = runner.invoke(main, ["program", "delete", "9001"], input="y\n")
 
         assert result.exit_code == 0
         assert "OK" in result.output
-        mock_rega_context.delete_program.assert_called_once_with(9001)
+        mock_backend_context.delete_program.assert_called_once_with("9001")
 
-    def test_cancels_without_confirmation(self, runner, mock_rega_context):
+    def test_cancels_without_confirmation(self, runner, mock_backend_context):
         """Should not delete program if confirmation declined."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="Test Program", description="", active=True, visible=True, last_execute_time=0
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="Test Program", is_active=True, is_internal=False, last_execute_time=None
         )
 
         result = runner.invoke(main, ["program", "delete", "9001"], input="n\n")
 
         assert result.exit_code == 0
         assert "Cancelled" in result.output
-        mock_rega_context.delete_program.assert_not_called()
+        mock_backend_context.delete_program.assert_not_called()
 
-    def test_deletes_with_yes_flag(self, runner, mock_rega_context):
+    def test_deletes_with_yes_flag(self, runner, mock_backend_context):
         """Should delete program without confirmation if --yes flag used."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="Test Program", description="", active=True, visible=True, last_execute_time=0
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="Test Program", is_active=True, is_internal=False, last_execute_time=None
         )
+        mock_backend_context.delete_program.return_value = "Test Program"
 
         result = runner.invoke(main, ["program", "delete", "--yes", "9001"])
 
         assert result.exit_code == 0
         assert "OK" in result.output
-        mock_rega_context.delete_program.assert_called_once_with(9001)
+        mock_backend_context.delete_program.assert_called_once_with("9001")
 
 
 class TestProgramEnableCommand:
     """Tests for 'ccu program enable' command."""
 
-    def test_enables_program(self, runner, mock_rega_context):
+    def test_enables_program(self, runner, mock_backend_context):
         """Should enable the program."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="Test Program", description="", active=False, visible=True, last_execute_time=0
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="Test Program", is_active=False, is_internal=False, last_execute_time=None
         )
 
         result = runner.invoke(main, ["program", "enable", "9001"])
@@ -261,18 +256,16 @@ class TestProgramEnableCommand:
         assert result.exit_code == 0
         assert "OK" in result.output
         assert "enabled" in result.output
-        mock_rega_context.set_program_active.assert_called_once_with(9001, True)
+        mock_backend_context.set_program_active.assert_called_once_with("9001", True)
 
 
 class TestProgramDisableCommand:
     """Tests for 'ccu program disable' command."""
 
-    def test_disables_program(self, runner, mock_rega_context):
+    def test_disables_program(self, runner, mock_backend_context):
         """Should disable the program."""
-        from ccu_cli.rega import Program
-
-        mock_rega_context.get_program.return_value = Program(
-            id=9001, name="Test Program", description="", active=True, visible=True, last_execute_time=0
+        mock_backend_context.get_program.return_value = BackendProgram(
+            pid="9001", name="Test Program", is_active=True, is_internal=False, last_execute_time=None
         )
 
         result = runner.invoke(main, ["program", "disable", "9001"])
@@ -280,7 +273,7 @@ class TestProgramDisableCommand:
         assert result.exit_code == 0
         assert "OK" in result.output
         assert "disabled" in result.output
-        mock_rega_context.set_program_active.assert_called_once_with(9001, False)
+        mock_backend_context.set_program_active.assert_called_once_with("9001", False)
 
 
 class TestRoomsCommand:

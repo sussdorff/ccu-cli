@@ -1,6 +1,7 @@
 """Backend adapter for aiohomematic.
 
 Provides a sync-friendly wrapper around the async aiohomematic API for CLI use.
+Uses ReGa client for operations not available in aiohomematic (e.g., delete_program).
 """
 
 import asyncio
@@ -13,6 +14,7 @@ from aiohomematic.const import ParamsetKey
 
 from .config import CCUConfig
 from .xmlrpc import DeviceLink, LinkInfo, XMLRPCClient
+
 
 
 class BackendError(Exception):
@@ -271,12 +273,12 @@ class CCUBackend:
     def list_sysvars(self) -> list[SysVar]:
         """List all system variables."""
         sysvars = []
-        for sysvar in self.central.hub.sysvars:
+        for sysvar in self.central.hub_coordinator.sysvar_data_points.values():
             sysvars.append(
                 SysVar(
                     name=sysvar.name,
                     value=sysvar.value,
-                    data_type=str(sysvar.data_type) if sysvar.data_type else "",
+                    data_type=str(sysvar.data_type) if hasattr(sysvar, "data_type") and sysvar.data_type else "",
                     unit=getattr(sysvar, "unit", None),
                 )
             )
@@ -284,24 +286,20 @@ class CCUBackend:
 
     def get_sysvar(self, name: str) -> SysVar | None:
         """Get a system variable by name."""
-        sysvar = self.central.get_sysvar_by_name(sysvar_name=name)
+        sysvar = self.central.hub_coordinator.get_system_variable(name=name)
         if sysvar is None:
             return None
         return SysVar(
             name=sysvar.name,
             value=sysvar.value,
-            data_type=str(sysvar.data_type) if sysvar.data_type else "",
+            data_type=str(sysvar.data_type) if hasattr(sysvar, "data_type") and sysvar.data_type else "",
             unit=getattr(sysvar, "unit", None),
         )
 
     def set_sysvar(self, name: str, value: Any) -> None:
         """Set a system variable value."""
-        sysvar = self.central.get_sysvar_by_name(sysvar_name=name)
-        if sysvar is None:
-            raise BackendError(f"System variable not found: {name}")
-
         async def _set() -> None:
-            await sysvar.set_value(value)
+            await self.central.hub_coordinator.set_system_variable(name=name, value=value)
 
         self._run_async(_set())
 
@@ -310,48 +308,141 @@ class CCUBackend:
     def list_programs(self) -> list[Program]:
         """List all programs."""
         programs = []
-        for program in self.central.hub.programs:
+        # Get unique programs via their switch data point (one per program)
+        # program_data_points returns a tuple of all program data points (buttons + switches)
+        seen_pids: set[str] = set()
+        for dp in self.central.hub_coordinator.program_data_points:
+            # Each program has a switch data point with the is_active/is_internal properties
+            pid = getattr(dp, "pid", None)
+            if pid is None or pid in seen_pids:
+                continue
+            seen_pids.add(pid)
+            # Only switches have is_active property; buttons don't
+            if not hasattr(dp, "is_active"):
+                continue
             programs.append(
                 Program(
-                    pid=program.unique_id,
-                    name=program.name,
-                    is_active=program.is_active,
-                    is_internal=program.is_internal,
-                    last_execute_time=None,  # Not exposed directly in aiohomematic
+                    pid=pid,
+                    name=dp.name,
+                    is_active=dp.is_active,
+                    is_internal=dp.is_internal,
+                    last_execute_time=None,
                 )
             )
         return programs
 
-    def get_program(self, name: str) -> Program | None:
-        """Get a program by name."""
-        program = self.central.get_program_by_name(program_name=name)
+    def _get_program_dp(self, id_or_name: str) -> Any:
+        """Get a program data point (the switch) by ID or name."""
+        # Try by ID (pid) first
+        program_type = self.central.hub_coordinator.get_program_data_point(pid=id_or_name)
+        if program_type is None:
+            # Try by legacy_name (the display name)
+            program_type = self.central.hub_coordinator.get_program_data_point(legacy_name=id_or_name)
+        if program_type is None:
+            return None
+        # Return the switch which has the program state (is_active, is_internal)
+        return program_type.switch
+
+    def get_program(self, id_or_name: str) -> Program | None:
+        """Get a program by ID or name.
+
+        Args:
+            id_or_name: Program ID (unique_id) or name
+
+        Returns:
+            Program object or None if not found
+        """
+        program = self._get_program_dp(id_or_name)
         if program is None:
             return None
         return Program(
-            pid=program.unique_id,
+            pid=program.pid,
             name=program.name,
             is_active=program.is_active,
             is_internal=program.is_internal,
             last_execute_time=None,
         )
 
-    def set_program_active(self, name: str, active: bool) -> None:
-        """Enable or disable a program."""
-        program = self.central.get_program_by_name(program_name=name)
+    def run_program(self, id_or_name: str) -> None:
+        """Execute a program.
+
+        Args:
+            id_or_name: Program ID (unique_id) or name
+
+        Raises:
+            BackendError: If program not found
+        """
+        program = self._get_program_dp(id_or_name)
         if program is None:
-            raise BackendError(f"Program not found: {name}")
+            raise BackendError(f"Program not found: {id_or_name}")
+
+        async def _run() -> None:
+            await self.central.hub_coordinator.execute_program(pid=program.pid)
+
+        self._run_async(_run())
+
+    def set_program_active(self, id_or_name: str, active: bool) -> None:
+        """Enable or disable a program.
+
+        Args:
+            id_or_name: Program ID (unique_id) or name
+            active: True to enable, False to disable
+
+        Raises:
+            BackendError: If program not found
+        """
+        program = self._get_program_dp(id_or_name)
+        if program is None:
+            raise BackendError(f"Program not found: {id_or_name}")
 
         async def _set() -> None:
-            await program.set_active(active)
+            await self.central.hub_coordinator.set_program_state(pid=program.pid, state=active)
 
         self._run_async(_set())
+
+    def delete_program(self, id_or_name: str) -> str:
+        """Delete a program.
+
+        Note: Uses ReGa client since aiohomematic doesn't support program deletion.
+
+        Args:
+            id_or_name: Program ID (unique_id) or name
+
+        Returns:
+            Name of the deleted program
+
+        Raises:
+            BackendError: If program not found or deletion fails
+        """
+        from .rega import ReGaClient, ReGaError
+
+        # First find the program via aiohomematic to get details
+        program = self.get_program(id_or_name)
+        if program is None:
+            raise BackendError(f"Program not found: {id_or_name}")
+
+        # Use ReGa to delete (requires numeric ID)
+        # The pid from aiohomematic is the unique_id string, we need to extract the numeric part
+        # unique_id format is typically just the numeric ID as a string
+        try:
+            program_id = int(program.pid)
+        except ValueError:
+            raise BackendError(f"Cannot delete program: invalid ID format '{program.pid}'")
+
+        with ReGaClient(self.config) as rega:
+            try:
+                rega.delete_program(program_id)
+            except ReGaError as e:
+                raise BackendError(f"Failed to delete program: {e}")
+
+        return program.name
 
     def refresh_data(self) -> None:
         """Refresh all data from the CCU."""
 
         async def _refresh() -> None:
-            await self.central.hub.fetch_program_data()
-            await self.central.hub.fetch_sysvar_data()
+            await self.central.hub_coordinator.fetch_program_data()
+            await self.central.hub_coordinator.fetch_sysvar_data()
 
         self._run_async(_refresh())
 
