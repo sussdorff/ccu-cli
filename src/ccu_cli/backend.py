@@ -12,6 +12,7 @@ from aiohomematic.central import CentralConfig, CentralUnit
 from aiohomematic.const import ParamsetKey
 
 from .config import CCUConfig
+from .xmlrpc import DeviceLink, LinkInfo, XMLRPCClient
 
 
 class BackendError(Exception):
@@ -353,6 +354,139 @@ class CCUBackend:
             await self.central.hub.fetch_sysvar_data()
 
         self._run_async(_refresh())
+
+    # Link operations (Direktverknüpfungen)
+
+    def get_link_peers(self, address: str) -> list[str]:
+        """Get link peers for a channel.
+
+        Args:
+            address: Channel address (e.g., "000B5D89B014D8:1")
+
+        Returns:
+            List of peer addresses
+        """
+
+        async def _get_peers() -> list[str]:
+            return await self.central.get_link_peers(address=address)
+
+        return self._run_async(_get_peers())
+
+    def create_link(
+        self,
+        sender: str,
+        receiver: str,
+        name: str = "",
+        description: str = "",
+    ) -> None:
+        """Create a device link (Direktverknüpfung).
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+            name: Optional link name
+            description: Optional link description
+        """
+
+        async def _add_link() -> None:
+            await self.central.add_link(
+                sender_address=sender,
+                receiver_address=receiver,
+                name=name,
+                description=description,
+            )
+
+        self._run_async(_add_link())
+
+    def delete_link(self, sender: str, receiver: str) -> None:
+        """Remove a device link.
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+        """
+
+        async def _remove_link() -> None:
+            await self.central.remove_link(
+                sender_address=sender,
+                receiver_address=receiver,
+            )
+
+        self._run_async(_remove_link())
+
+    def list_links(
+        self, address: str | None = None, interface: str = "HmIP-RF"
+    ) -> list[DeviceLink]:
+        """List device links with full details (name, description).
+
+        Uses XML-RPC because aiohomematic only returns peer addresses,
+        not the full link metadata.
+
+        Args:
+            address: Optional filter by device/channel address
+            interface: Interface to use ("HmIP-RF" or "BidCos-RF")
+
+        Returns:
+            List of device links with full details
+        """
+        with XMLRPCClient(self.config, interface) as client:
+            return client.get_links(address)
+
+    def get_link(
+        self, sender: str, receiver: str, interface: str = "HmIP-RF"
+    ) -> LinkInfo | None:
+        """Get detailed information about a specific link.
+
+        Uses XML-RPC for detailed link info including flags.
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+            interface: Interface to use
+
+        Returns:
+            Link info or None if not found
+        """
+        with XMLRPCClient(self.config, interface) as client:
+            return client.get_link_info(sender, receiver)
+
+    def get_link_paramset(
+        self, sender: str, receiver: str, interface: str = "HmIP-RF"
+    ) -> dict[str, Any]:
+        """Get the LINK paramset for a device link.
+
+        Uses XML-RPC for paramset access.
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+            interface: Interface to use
+
+        Returns:
+            Dictionary of link parameter values
+        """
+        with XMLRPCClient(self.config, interface) as client:
+            return client.get_link_paramset(sender, receiver)
+
+    def set_link_paramset(
+        self,
+        sender: str,
+        receiver: str,
+        params: dict[str, Any],
+        interface: str = "HmIP-RF",
+    ) -> None:
+        """Set parameters for a device link.
+
+        Uses XML-RPC for paramset access.
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+            params: Dictionary of parameter values to set
+            interface: Interface to use
+        """
+        with XMLRPCClient(self.config, interface) as client:
+            client.set_link_paramset(sender, receiver, params)
 
 
 @contextmanager

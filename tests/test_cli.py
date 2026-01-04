@@ -399,3 +399,246 @@ class TestRoomDeleteCommand:
 
         assert result.exit_code != 0
         assert "Room not found" in result.output
+
+
+class TestLinkListCommand:
+    """Tests for 'ccu link list' command."""
+
+    def test_displays_links_table(self, runner, mock_backend_context):
+        """Should display links in a table."""
+        from ccu_cli.xmlrpc import DeviceLink
+
+        mock_backend_context.list_links.return_value = [
+            DeviceLink(
+                sender="000B5D89B014D8:1",
+                receiver="0013A40997105E:4",
+                name="Test Link",
+                description="Test Description",
+            ),
+        ]
+
+        result = runner.invoke(main, ["link", "list"])
+
+        assert result.exit_code == 0
+        assert "000B5D89B014D8:1" in result.output
+        assert "0013A40997105E:4" in result.output
+        assert "Test Link" in result.output
+
+    def test_shows_no_links_message(self, runner, mock_backend_context):
+        """Should display message when no links exist."""
+        mock_backend_context.list_links.return_value = []
+
+        result = runner.invoke(main, ["link", "list"])
+
+        assert result.exit_code == 0
+        assert "No links found" in result.output
+
+    def test_filters_by_address(self, runner, mock_backend_context):
+        """Should filter links by address."""
+        mock_backend_context.list_links.return_value = []
+
+        result = runner.invoke(main, ["link", "list", "-a", "000B5D89B014D8:1"])
+
+        assert result.exit_code == 0
+        mock_backend_context.list_links.assert_called_once_with("000B5D89B014D8:1", "HmIP-RF")
+
+
+class TestLinkGetCommand:
+    """Tests for 'ccu link get' command."""
+
+    def test_displays_link_details(self, runner, mock_backend_context):
+        """Should display link details."""
+        from ccu_cli.xmlrpc import LinkInfo
+
+        mock_backend_context.get_link.return_value = LinkInfo(
+            sender="000B5D89B014D8:1",
+            receiver="0013A40997105E:4",
+            name="Test Link",
+            description="Test Description",
+            flags=1,
+        )
+
+        result = runner.invoke(
+            main, ["link", "get", "000B5D89B014D8:1", "0013A40997105E:4"]
+        )
+
+        assert result.exit_code == 0
+        assert "000B5D89B014D8:1" in result.output
+        assert "Test Link" in result.output
+
+    def test_shows_not_found_error(self, runner, mock_backend_context):
+        """Should display error when link not found."""
+        mock_backend_context.get_link.return_value = None
+
+        result = runner.invoke(main, ["link", "get", "sender", "receiver"])
+
+        assert result.exit_code != 0
+        assert "Link not found" in result.output
+
+
+class TestLinkCreateCommand:
+    """Tests for 'ccu link create' command."""
+
+    def test_creates_link(self, runner, mock_backend_context):
+        """Should create a device link."""
+        result = runner.invoke(
+            main,
+            ["link", "create", "000B5D89B014D8:1", "0013A40997105E:4"],
+        )
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "Created link" in result.output
+        mock_backend_context.create_link.assert_called_once_with(
+            "000B5D89B014D8:1", "0013A40997105E:4", "", ""
+        )
+
+    def test_creates_link_with_name(self, runner, mock_backend_context):
+        """Should create link with name and description."""
+        result = runner.invoke(
+            main,
+            [
+                "link",
+                "create",
+                "000B5D89B014D8:1",
+                "0013A40997105E:4",
+                "--name",
+                "Test Link",
+                "--description",
+                "Test Desc",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_backend_context.create_link.assert_called_once_with(
+            "000B5D89B014D8:1", "0013A40997105E:4", "Test Link", "Test Desc"
+        )
+
+
+class TestLinkDeleteCommand:
+    """Tests for 'ccu link delete' command."""
+
+    def test_deletes_link_with_confirmation(self, runner, mock_backend_context):
+        """Should delete link after confirmation."""
+        result = runner.invoke(
+            main,
+            ["link", "delete", "000B5D89B014D8:1", "0013A40997105E:4"],
+            input="y\n",
+        )
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_backend_context.delete_link.assert_called_once_with(
+            "000B5D89B014D8:1", "0013A40997105E:4"
+        )
+
+    def test_cancels_without_confirmation(self, runner, mock_backend_context):
+        """Should not delete link if confirmation declined."""
+        result = runner.invoke(
+            main,
+            ["link", "delete", "000B5D89B014D8:1", "0013A40997105E:4"],
+            input="n\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        mock_backend_context.delete_link.assert_not_called()
+
+    def test_deletes_with_yes_flag(self, runner, mock_backend_context):
+        """Should delete link without confirmation if --yes flag used."""
+        result = runner.invoke(
+            main,
+            ["link", "delete", "--yes", "000B5D89B014D8:1", "0013A40997105E:4"],
+        )
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_backend_context.delete_link.assert_called_once()
+
+
+class TestLinkConfigGetCommand:
+    """Tests for 'ccu link config get' command."""
+
+    def test_displays_link_params(self, runner, mock_backend_context):
+        """Should display link parameters as JSON."""
+        mock_backend_context.get_link_paramset.return_value = {
+            "LONG_PRESS_TIME": 0.5,
+            "DBL_PRESS_TIME": 0.3,
+        }
+
+        result = runner.invoke(
+            main,
+            ["link", "config", "get", "000B5D89B014D8:1", "0013A40997105E:4"],
+        )
+
+        assert result.exit_code == 0
+        assert "LONG_PRESS_TIME" in result.output
+        assert "0.5" in result.output
+
+
+class TestLinkConfigSetCommand:
+    """Tests for 'ccu link config set' command."""
+
+    def test_sets_link_params(self, runner, mock_backend_context):
+        """Should set link parameters."""
+        result = runner.invoke(
+            main,
+            [
+                "link",
+                "config",
+                "set",
+                "000B5D89B014D8:1",
+                "0013A40997105E:4",
+                "LONG_PRESS_TIME=1.0",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_backend_context.set_link_paramset.assert_called_once_with(
+            "000B5D89B014D8:1",
+            "0013A40997105E:4",
+            {"LONG_PRESS_TIME": 1.0},
+            "HmIP-RF",
+        )
+
+    def test_sets_multiple_params(self, runner, mock_backend_context):
+        """Should set multiple parameters at once."""
+        result = runner.invoke(
+            main,
+            [
+                "link",
+                "config",
+                "set",
+                "sender",
+                "receiver",
+                "PARAM1=10",
+                "PARAM2=true",
+                "PARAM3=text",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_backend_context.set_link_paramset.assert_called_once_with(
+            "sender",
+            "receiver",
+            {"PARAM1": 10, "PARAM2": True, "PARAM3": "text"},
+            "HmIP-RF",
+        )
+
+    def test_rejects_invalid_format(self, runner, mock_backend_context):
+        """Should reject parameters without = sign."""
+        result = runner.invoke(
+            main,
+            [
+                "link",
+                "config",
+                "set",
+                "sender",
+                "receiver",
+                "invalid_param",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid parameter format" in result.output
