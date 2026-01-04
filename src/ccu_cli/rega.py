@@ -361,132 +361,10 @@ if (channel) {{
                     continue
         return None
 
-    def list_programs(self) -> list[Program]:
-        """List all programs with details.
-
-        Returns:
-            List of Program objects with full details
-        """
-        script = """
-string sProgramId;
-object oProgram;
-foreach (sProgramId, dom.GetObject(ID_PROGRAMS).EnumUsedIDs()) {
-    oProgram = dom.GetObject(sProgramId);
-    if (oProgram != null) {
-        WriteLine(oProgram.ID() # ";" # oProgram.Name() # ";" # oProgram.PrgInfo() # ";" # oProgram.Active() # ";" # oProgram.Visible() # ";" # oProgram.ProgramLastExecuteTime().ToInteger());
-    }
-}
-"""
-        result = self.execute(script)
-        programs = []
-        for line in result.strip().split("\n"):
-            line = line.strip()
-            if not line or line.startswith("<"):
-                continue
-            parts = line.split(";")
-            if len(parts) >= 6:
-                programs.append(
-                    Program(
-                        id=int(parts[0]),
-                        name=parts[1],
-                        description=parts[2],
-                        active=parts[3].lower() == "true",
-                        visible=parts[4].lower() == "true",
-                        last_execute_time=int(parts[5]) if parts[5] else 0,
-                    )
-                )
-        return programs
-
-    def get_program(self, program_id: int) -> Program | None:
-        """Get a program by ID.
-
-        Args:
-            program_id: The program's internal ID
-
-        Returns:
-            Program object or None if not found
-        """
-        script = f"""
-object oProgram = dom.GetObject({program_id});
-if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
-    WriteLine(oProgram.ID() # ";" # oProgram.Name() # ";" # oProgram.PrgInfo() # ";" # oProgram.Active() # ";" # oProgram.Visible() # ";" # oProgram.ProgramLastExecuteTime().ToInteger());
-}} else {{
-    WriteLine("ERROR:Program not found");
-}}
-"""
-        result = self.execute(script)
-        first_line = result.strip().split("\n")[0].strip()
-        if first_line.startswith("ERROR:"):
-            return None
-
-        parts = first_line.split(";")
-        if len(parts) >= 6:
-            return Program(
-                id=int(parts[0]),
-                name=parts[1],
-                description=parts[2],
-                active=parts[3].lower() == "true",
-                visible=parts[4].lower() == "true",
-                last_execute_time=int(parts[5]) if parts[5] else 0,
-            )
-        return None
-
-    def get_program_by_name(self, name: str) -> Program | None:
-        """Get a program by name.
-
-        Args:
-            name: The program's name
-
-        Returns:
-            Program object or None if not found
-        """
-        script = f"""
-object oProgram = dom.GetObject(ID_PROGRAMS).Get("{name}");
-if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
-    WriteLine(oProgram.ID() # ";" # oProgram.Name() # ";" # oProgram.PrgInfo() # ";" # oProgram.Active() # ";" # oProgram.Visible() # ";" # oProgram.ProgramLastExecuteTime().ToInteger());
-}} else {{
-    WriteLine("ERROR:Program not found");
-}}
-"""
-        result = self.execute(script)
-        first_line = result.strip().split("\n")[0].strip()
-        if first_line.startswith("ERROR:"):
-            return None
-
-        parts = first_line.split(";")
-        if len(parts) >= 6:
-            return Program(
-                id=int(parts[0]),
-                name=parts[1],
-                description=parts[2],
-                active=parts[3].lower() == "true",
-                visible=parts[4].lower() == "true",
-                last_execute_time=int(parts[5]) if parts[5] else 0,
-            )
-        return None
-
-    def run_program(self, program_id: int) -> None:
-        """Execute a program by ID.
-
-        Args:
-            program_id: The program's internal ID
-
-        Raises:
-            ReGaError: If program not found
-        """
-        script = f"""
-object oProgram = dom.GetObject({program_id});
-if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
-    oProgram.ProgramExecute();
-    WriteLine("OK");
-}} else {{
-    WriteLine("ERROR:Program not found");
-}}
-"""
-        result = self.execute(script)
-        first_line = result.strip().split("\n")[0].strip()
-        if first_line.startswith("ERROR:"):
-            raise ReGaError(first_line[6:])
+    # Program operations
+    # Note: Most program operations (list, get, run, set_active) are handled
+    # by aiohomematic via CCUBackend. Only delete_program is kept here since
+    # aiohomematic doesn't support program deletion.
 
     def delete_program(self, program_id: int) -> None:
         """Delete a program.
@@ -501,31 +379,6 @@ if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
 object oProgram = dom.GetObject({program_id});
 if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
     dom.DeleteObject(oProgram.ID());
-    WriteLine("OK");
-}} else {{
-    WriteLine("ERROR:Program not found");
-}}
-"""
-        result = self.execute(script)
-        first_line = result.strip().split("\n")[0].strip()
-        if first_line.startswith("ERROR:"):
-            raise ReGaError(first_line[6:])
-
-    def set_program_active(self, program_id: int, active: bool) -> None:
-        """Enable or disable a program.
-
-        Args:
-            program_id: The program's internal ID
-            active: True to enable, False to disable
-
-        Raises:
-            ReGaError: If program not found
-        """
-        active_str = "true" if active else "false"
-        script = f"""
-object oProgram = dom.GetObject({program_id});
-if (oProgram && oProgram.IsTypeOf(OT_PROGRAM)) {{
-    oProgram.Active({active_str});
     WriteLine("OK");
 }} else {{
     WriteLine("ERROR:Program not found");

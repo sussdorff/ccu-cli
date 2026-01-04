@@ -9,7 +9,7 @@ from rich.table import Table
 
 from .backend import CCUBackend, BackendError
 from .config import load_config
-from .rega import Program as ReGaProgram, ReGaClient, ReGaError, RoomDevice
+from .rega import ReGaClient, ReGaError
 from .xmlrpc import XMLRPCClient, XMLRPCError
 
 console = Console()
@@ -283,8 +283,12 @@ def program() -> None:
     pass
 
 
-def _format_timestamp(ts: int) -> str:
+def _format_timestamp(ts: int | str | None) -> str:
     """Format Unix timestamp for display."""
+    if ts is None:
+        return "N/A"
+    if isinstance(ts, str):
+        return ts if ts else "Never"
     if ts == 0:
         return "Never"
     from datetime import datetime
@@ -292,60 +296,33 @@ def _format_timestamp(ts: int) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _resolve_program_id(client: ReGaClient, id_or_name: str) -> tuple[int, Program]:
-    """Resolve a program ID or name to ID and Program object.
-
-    Args:
-        client: ReGa client
-        id_or_name: Program ID (numeric) or name
-
-    Returns:
-        Tuple of (program_id, Program)
-
-    Raises:
-        ReGaError: If program not found
-    """
-    # Try as ID first
-    try:
-        program_id = int(id_or_name)
-        prg = client.get_program(program_id)
-        if prg:
-            return program_id, prg
-    except ValueError:
-        pass
-
-    # Try as name
-    prg = client.get_program_by_name(id_or_name)
-    if prg:
-        return prg.id, prg
-
-    raise ReGaError(f"Program not found: {id_or_name}")
-
-
 @program.command("list")
 def program_list() -> None:
     """List all programs."""
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            programs = client.list_programs()
+            programs = backend.list_programs()
 
             table = Table(title="Programs")
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="green")
             table.add_column("Active", style="yellow")
-            table.add_column("Last Executed", style="magenta")
+            table.add_column("Internal", style="magenta")
 
             for prg in programs:
-                active_str = "✓" if prg.active else "✗"
+                if prg.is_internal:
+                    continue  # Skip internal programs by default
+                active_str = "✓" if prg.is_active else "✗"
+                internal_str = "✓" if prg.is_internal else ""
                 table.add_row(
-                    str(prg.id),
+                    prg.pid,
                     prg.name,
                     active_str,
-                    _format_timestamp(prg.last_execute_time),
+                    internal_str,
                 )
 
             console.print(table)
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -353,30 +330,32 @@ def program_list() -> None:
             sys.exit(1)
 
 
-@program.command("show")
+@program.command("get")
 @click.argument("id_or_name")
-def program_show(id_or_name: str) -> None:
+def program_get(id_or_name: str) -> None:
     """Show program details.
 
-    ID_OR_NAME can be a program ID (numeric) or the program name.
+    ID_OR_NAME can be a program ID or the program name.
     """
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            _, prg = _resolve_program_id(client, id_or_name)
+            prg = backend.get_program(id_or_name)
+            if prg is None:
+                error_console.print(f"[red]Error:[/red] Program not found: {id_or_name}")
+                sys.exit(1)
 
             table = Table(title=f"Program: {prg.name}")
             table.add_column("Property", style="cyan")
             table.add_column("Value", style="green")
 
-            table.add_row("ID", str(prg.id))
+            table.add_row("ID", prg.pid)
             table.add_row("Name", prg.name)
-            table.add_row("Description", prg.description or "(none)")
-            table.add_row("Active", "Yes" if prg.active else "No")
-            table.add_row("Visible", "Yes" if prg.visible else "No")
+            table.add_row("Active", "Yes" if prg.is_active else "No")
+            table.add_row("Internal", "Yes" if prg.is_internal else "No")
             table.add_row("Last Executed", _format_timestamp(prg.last_execute_time))
 
             console.print(table)
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -389,14 +368,18 @@ def program_show(id_or_name: str) -> None:
 def program_run(id_or_name: str) -> None:
     """Execute a program.
 
-    ID_OR_NAME can be a program ID (numeric) or the program name.
+    ID_OR_NAME can be a program ID or the program name.
     """
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            program_id, prg = _resolve_program_id(client, id_or_name)
-            client.run_program(program_id)
+            # Get program first to show its name in output
+            prg = backend.get_program(id_or_name)
+            if prg is None:
+                error_console.print(f"[red]Error:[/red] Program not found: {id_or_name}")
+                sys.exit(1)
+            backend.run_program(id_or_name)
             console.print(f"[green]OK[/green] Program '{prg.name}' executed")
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -410,22 +393,26 @@ def program_run(id_or_name: str) -> None:
 def program_delete(id_or_name: str, yes: bool) -> None:
     """Delete a program.
 
-    ID_OR_NAME can be a program ID (numeric) or the program name.
+    ID_OR_NAME can be a program ID or the program name.
     """
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            program_id, prg = _resolve_program_id(client, id_or_name)
+            # Get program first to show its name in confirmation
+            prg = backend.get_program(id_or_name)
+            if prg is None:
+                error_console.print(f"[red]Error:[/red] Program not found: {id_or_name}")
+                sys.exit(1)
 
             if not yes:
                 if not click.confirm(
-                    f"Are you sure you want to delete program '{prg.name}' (ID: {program_id})?"
+                    f"Are you sure you want to delete program '{prg.name}' (ID: {prg.pid})?"
                 ):
                     console.print("Cancelled")
                     return
 
-            client.delete_program(program_id)
-            console.print(f"[green]OK[/green] Deleted program '{prg.name}'")
-        except ReGaError as e:
+            deleted_name = backend.delete_program(id_or_name)
+            console.print(f"[green]OK[/green] Deleted program '{deleted_name}'")
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -438,14 +425,18 @@ def program_delete(id_or_name: str, yes: bool) -> None:
 def program_enable(id_or_name: str) -> None:
     """Enable a program.
 
-    ID_OR_NAME can be a program ID (numeric) or the program name.
+    ID_OR_NAME can be a program ID or the program name.
     """
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            program_id, prg = _resolve_program_id(client, id_or_name)
-            client.set_program_active(program_id, True)
+            # Get program first to show its name in output
+            prg = backend.get_program(id_or_name)
+            if prg is None:
+                error_console.print(f"[red]Error:[/red] Program not found: {id_or_name}")
+                sys.exit(1)
+            backend.set_program_active(id_or_name, True)
             console.print(f"[green]OK[/green] Program '{prg.name}' enabled")
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -458,14 +449,18 @@ def program_enable(id_or_name: str) -> None:
 def program_disable(id_or_name: str) -> None:
     """Disable a program.
 
-    ID_OR_NAME can be a program ID (numeric) or the program name.
+    ID_OR_NAME can be a program ID or the program name.
     """
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            program_id, prg = _resolve_program_id(client, id_or_name)
-            client.set_program_active(program_id, False)
+            # Get program first to show its name in output
+            prg = backend.get_program(id_or_name)
+            if prg is None:
+                error_console.print(f"[red]Error:[/red] Program not found: {id_or_name}")
+                sys.exit(1)
+            backend.set_program_active(id_or_name, False)
             console.print(f"[green]OK[/green] Program '{prg.name}' disabled")
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -477,30 +472,33 @@ def program_disable(id_or_name: str) -> None:
 @main.command(deprecated=True, hidden=True)
 def programs() -> None:
     """List all programs. (deprecated: use 'program list')"""
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            prgs = client.list_programs()
+            prgs = backend.list_programs()
 
             table = Table(title="Programs")
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="green")
             table.add_column("Active", style="yellow")
-            table.add_column("Last Executed", style="magenta")
+            table.add_column("Internal", style="magenta")
 
             for prg in prgs:
-                active_str = "✓" if prg.active else "✗"
+                if prg.is_internal:
+                    continue
+                active_str = "✓" if prg.is_active else "✗"
+                internal_str = "✓" if prg.is_internal else ""
                 table.add_row(
-                    str(prg.id),
+                    prg.pid,
                     prg.name,
                     active_str,
-                    _format_timestamp(prg.last_execute_time),
+                    internal_str,
                 )
 
             console.print(table)
             console.print(
                 "[yellow]Note:[/yellow] 'ccu programs' is deprecated. Use 'ccu program list' instead."
             )
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
@@ -512,17 +510,17 @@ def programs() -> None:
 @click.argument("name")
 def run(name: str) -> None:
     """Execute a program by name. (deprecated: use 'program run')"""
-    with get_rega_client() as client:
+    with get_backend() as backend:
         try:
-            prg = client.get_program_by_name(name)
+            prg = backend.get_program(name)
             if not prg:
-                raise ReGaError(f"Program not found: {name}")
-            client.run_program(prg.id)
+                raise BackendError(f"Program not found: {name}")
+            backend.run_program(name)
             console.print(f"[green]OK[/green] Program '{name}' executed")
             console.print(
                 "[yellow]Note:[/yellow] 'ccu run' is deprecated. Use 'ccu program run' instead."
             )
-        except ReGaError as e:
+        except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
