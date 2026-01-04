@@ -455,7 +455,11 @@ class CCUBackend:
     ) -> dict[str, Any]:
         """Get the LINK paramset for a device link.
 
-        Uses XML-RPC for paramset access.
+        Link paramsets can exist on both sides of the link:
+        - Sender side: getParamset(sender, receiver) - button/switch profiles
+        - Receiver side: getParamset(receiver, sender) - actuator profiles
+
+        This method returns both combined with prefixes to distinguish them.
 
         Args:
             sender: Sender channel address
@@ -463,10 +467,22 @@ class CCUBackend:
             interface: Interface to use
 
         Returns:
-            Dictionary of link parameter values
+            Dictionary with 'sender' and 'receiver' keys containing paramsets
         """
         with XMLRPCClient(self.config, interface) as client:
-            return client.get_link_paramset(sender, receiver)
+            result: dict[str, Any] = {}
+
+            # Get sender-side paramset (button profiles)
+            sender_params = client.get_link_paramset(sender, receiver)
+            if sender_params:
+                result["sender"] = sender_params
+
+            # Get receiver-side paramset (actuator profiles)
+            receiver_params = client.get_link_paramset(receiver, sender)
+            if receiver_params:
+                result["receiver"] = receiver_params
+
+            return result
 
     def set_link_paramset(
         self,
