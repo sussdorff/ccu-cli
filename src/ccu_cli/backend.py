@@ -5,6 +5,7 @@ Uses ReGa client for operations not available in aiohomematic (e.g., delete_prog
 """
 
 import asyncio
+import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
@@ -119,9 +120,21 @@ class CCUBackend:
         self._run_async(_start())
 
     def stop(self) -> None:
-        """Stop the backend connection."""
+        """Stop the backend connection.
+
+        Suppresses aiohomematic warnings during shutdown to avoid noise from
+        expected disconnection errors in background tasks.
+        """
         if self._central is not None:
-            self._run_async(self._central.stop())
+            # Suppress aiohomematic warnings during shutdown
+            # Background tasks may fail with connection errors which is expected
+            aiohomematic_logger = logging.getLogger("aiohomematic")
+            original_level = aiohomematic_logger.level
+            aiohomematic_logger.setLevel(logging.ERROR)
+            try:
+                self._run_async(self._central.stop())
+            finally:
+                aiohomematic_logger.setLevel(original_level)
             self._central = None
         if self._loop is not None:
             # Cancel any remaining tasks to avoid "Task was destroyed" warnings
