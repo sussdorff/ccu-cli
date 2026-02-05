@@ -164,6 +164,34 @@ ccu link config set <sender> <receiver> PARAM=value [PARAM2=value2 ...]
 ccu link config set --side sender <sender> <receiver> PARAM=value
 ```
 
+### Thermostat Schedules (Wochenprogramme)
+
+Manage heating profiles for HomeMatic thermostats (HM-TC-IT-WM-W-EU, HM-CC-RT-DN).
+
+```bash
+# Show current heating schedule
+ccu schedule get <address>
+ccu schedule get <address> --day mon
+ccu schedule get <address> --profile 2
+
+# Set a simple schedule (one heating period per day)
+ccu schedule set-simple <address> --start 05:00 --end 22:00
+ccu schedule set-simple <address> --start 06:00 --end 20:00 --comfort 21 --lowering 17
+ccu schedule set-simple <address> --start 05:00 --end 22:00 --day mon --day tue --day wed
+
+# Set constant temperature (no night setback)
+ccu schedule set-constant <address> --temp 21
+ccu schedule set-constant <address> --temp 21 --day sat --day sun
+
+# Activate a specific profile (P1, P2, or P3)
+ccu schedule activate <address> 1
+```
+
+**Schedule structure:**
+- Each thermostat has 3 profiles (P1, P2, P3)
+- Each profile has up to 13 time slots per day
+- `WEEK_PROGRAM_POINTER` determines the active profile (0=P1, 1=P2, 2=P3)
+
 ### Other Commands
 
 ```bash

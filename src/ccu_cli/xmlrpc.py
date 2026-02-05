@@ -220,3 +220,18 @@ class XMLRPCClient:
         except Exception as e:
             raise XMLRPCError(f"Failed to set link info: {e}") from e
 
+    def set_paramset(
+        self, address: str, paramset_key: str, params: dict[str, Any]
+    ) -> None:
+        """Set parameters in a paramset.
+
+        Args:
+            address: Device or channel address
+            paramset_key: Paramset key (MASTER, VALUES, etc.)
+            params: Dictionary of parameter values to set
+        """
+        try:
+            self.proxy.putParamset(address, paramset_key, params)
+        except Exception as e:
+            raise XMLRPCError(f"Failed to set paramset: {e}") from e
+

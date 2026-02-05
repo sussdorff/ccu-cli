@@ -10,8 +10,20 @@ from rich.console import Console
 from rich.table import Table
 
 from .backend import CCUBackend, BackendError
-from .config import ConfigurationError, load_config
+from .config import CCUConfig, ConfigurationError, load_config
 from .rega import ReGaClient, ReGaError
+from .schedule import (
+    WEEKDAYS,
+    WEEKDAY_SHORT,
+    WeekSchedule,
+    create_constant_schedule,
+    create_simple_schedule,
+    format_time,
+    parse_schedule_from_paramset,
+    build_schedule_params,
+    parse_time,
+)
+from .xmlrpc import XMLRPCClient, XMLRPCError
 
 # Suppress verbose logging from aiohomematic
 logging.getLogger("aiohomematic").setLevel(logging.WARNING)
@@ -1335,6 +1347,406 @@ def link_config_set(
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Schedule Commands (Thermostat Heating Profiles)
+# =============================================================================
+
+
+def _get_device_interface(address: str, backend: CCUBackend) -> str:
+    """Determine the correct interface for a device.
+
+    Args:
+        address: Device address (without channel suffix)
+        backend: CCU backend instance
+
+    Returns:
+        Interface name ("BidCos-RF" or "HmIP-RF")
+    """
+    device = backend.get_device(address)
+    if device is None:
+        # Default to BidCos-RF for legacy devices
+        return "BidCos-RF"
+
+    interface = device.interface
+    if "HMIP" in interface.upper() or "HmIP" in interface:
+        return "HmIP-RF"
+    return "BidCos-RF"
+
+
+def _get_config() -> CCUConfig:
+    """Get validated CCU configuration."""
+    config = load_config()
+    try:
+        config.validate()
+    except ConfigurationError as e:
+        error_console.print(f"[red]Configuration Error:[/red] {e}")
+        sys.exit(1)
+    return config
+
+
+@main.group()
+def schedule() -> None:
+    """Manage thermostat heating schedules (Wochenprogramme)."""
+    pass
+
+
+@schedule.command("get")
+@click.argument("address")
+@click.option(
+    "--profile",
+    "-p",
+    type=click.IntRange(1, 3),
+    default=None,
+    help="Profile number (1-3). Default: active profile.",
+)
+@click.option(
+    "--day",
+    "-d",
+    type=click.Choice(
+        ["mon", "tue", "wed", "thu", "fri", "sat", "sun", "all"],
+        case_sensitive=False,
+    ),
+    default="all",
+    help="Show specific day or all days.",
+)
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+def schedule_get(
+    address: str, profile: int | None, day: str, output_json: bool
+) -> None:
+    """Show thermostat heating schedule.
+
+    ADDRESS: Device address (e.g., LEQ0077156)
+
+    Shows the weekly heating profile with time slots and temperatures.
+    """
+    config = _get_config()
+
+    # Ensure we have just the device address, not a channel
+    device_addr = address.split(":")[0]
+
+    with get_backend() as backend:
+        interface = _get_device_interface(device_addr, backend)
+
+    with XMLRPCClient(config, interface) as client:
+        try:
+            params = client.get_paramset(device_addr, "MASTER")
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+    # Determine active profile if not specified
+    if profile is None:
+        profile = params.get("WEEK_PROGRAM_POINTER", 0) + 1
+
+    week_schedule = parse_schedule_from_paramset(params, profile)
+
+    if output_json:
+        # Build JSON output
+        json_data: dict[str, Any] = {
+            "address": device_addr,
+            "active_profile": params.get("WEEK_PROGRAM_POINTER", 0) + 1,
+            "showing_profile": profile,
+            "comfort_temperature": week_schedule.comfort_temp,
+            "lowering_temperature": week_schedule.lowering_temp,
+            "days": {},
+        }
+
+        days_to_show = (
+            WEEKDAYS if day == "all" else [WEEKDAY_SHORT.get(day.lower(), day.upper())]
+        )
+
+        for d in days_to_show:
+            day_schedule = week_schedule.days[d]
+            active_slots = day_schedule.get_active_slots()
+            json_data["days"][d.lower()] = [
+                {
+                    "slot": slot.slot_number,
+                    "end_time": slot.end_time,
+                    "end_minutes": slot.end_minutes,
+                    "temperature": slot.temperature,
+                }
+                for slot in active_slots
+            ]
+
+        console.print_json(json.dumps(json_data, indent=2))
+    else:
+        # Human-readable table output
+        active_profile = params.get("WEEK_PROGRAM_POINTER", 0) + 1
+        profile_indicator = " (active)" if profile == active_profile else ""
+
+        console.print(f"[bold]Device:[/bold] {device_addr}")
+        console.print(f"[bold]Profile:[/bold] P{profile}{profile_indicator}")
+        console.print(
+            f"[dim]Comfort: {week_schedule.comfort_temp}°C, "
+            f"Lowering: {week_schedule.lowering_temp}°C[/dim]"
+        )
+        console.print()
+
+        days_to_show = (
+            WEEKDAYS if day == "all" else [WEEKDAY_SHORT.get(day.lower(), day.upper())]
+        )
+
+        for d in days_to_show:
+            day_schedule = week_schedule.days[d]
+            active_slots = day_schedule.get_active_slots()
+
+            table = Table(title=d.capitalize())
+            table.add_column("Time", style="cyan")
+            table.add_column("Until", style="yellow")
+            table.add_column("Temp", style="green")
+
+            prev_end = "00:00"
+            for slot in active_slots:
+                table.add_row(
+                    prev_end,
+                    slot.end_time,
+                    f"{slot.temperature}°C",
+                )
+                prev_end = slot.end_time
+
+            console.print(table)
+            console.print()
+
+
+@schedule.command("set-simple")
+@click.argument("address")
+@click.option(
+    "--start",
+    "-s",
+    required=True,
+    help="Heating start time (HH:MM, e.g., 05:00).",
+)
+@click.option(
+    "--end",
+    "-e",
+    required=True,
+    help="Heating end time (HH:MM, e.g., 22:00).",
+)
+@click.option(
+    "--comfort",
+    "-c",
+    type=float,
+    default=21.0,
+    help="Comfort temperature during heating period (default: 21.0).",
+)
+@click.option(
+    "--lowering",
+    "-l",
+    type=float,
+    default=17.0,
+    help="Lowering temperature outside heating period (default: 17.0).",
+)
+@click.option(
+    "--profile",
+    "-p",
+    type=click.IntRange(1, 3),
+    default=1,
+    help="Profile number to modify (1-3, default: 1).",
+)
+@click.option(
+    "--day",
+    "-d",
+    multiple=True,
+    help="Days to apply to (mon/tue/wed/thu/fri/sat/sun). Default: all days.",
+)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+def schedule_set_simple(
+    address: str,
+    start: str,
+    end: str,
+    comfort: float,
+    lowering: float,
+    profile: int,
+    day: tuple[str, ...],
+    yes: bool,
+) -> None:
+    """Set a simple heating schedule with one heating period.
+
+    ADDRESS: Device address (e.g., LEQ0077156)
+
+    Creates a schedule with:
+    - Lowering temperature from midnight until START
+    - Comfort temperature from START until END
+    - Lowering temperature from END until midnight
+
+    Example: ccu schedule set-simple LEQ0077156 --start 05:00 --end 22:00
+    """
+    # Validate times
+    try:
+        start_mins = parse_time(start)
+        end_mins = parse_time(end)
+    except ValueError as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    if start_mins >= end_mins:
+        error_console.print("[red]Error:[/red] Start time must be before end time.")
+        sys.exit(1)
+
+    config = _get_config()
+    device_addr = address.split(":")[0]
+    days_list = list(day) if day else None
+
+    with get_backend() as backend:
+        interface = _get_device_interface(device_addr, backend)
+        device = backend.get_device(device_addr)
+        device_name = device.name if device else device_addr
+
+    # Build the schedule
+    new_schedule = create_simple_schedule(
+        profile=profile,
+        heat_start=start,
+        heat_end=end,
+        comfort_temp=comfort,
+        lowering_temp=lowering,
+        days=days_list,
+    )
+
+    days_str = ", ".join(day) if day else "all days"
+
+    if not yes:
+        console.print(f"[bold]Device:[/bold] {device_name} ({device_addr})")
+        console.print(f"[bold]Profile:[/bold] P{profile}")
+        console.print(f"[bold]Days:[/bold] {days_str}")
+        console.print()
+        console.print(f"Schedule: {lowering}°C → [cyan]{start}[/cyan] → {comfort}°C → [cyan]{end}[/cyan] → {lowering}°C")
+        console.print()
+
+        if not click.confirm("Apply this schedule?"):
+            console.print("Cancelled.")
+            return
+
+    # Apply the schedule
+    params = build_schedule_params(new_schedule)
+
+    with XMLRPCClient(config, interface) as client:
+        try:
+            client.set_paramset(device_addr, "MASTER", params)
+            console.print(f"[green]OK[/green] Schedule updated for P{profile}")
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@schedule.command("set-constant")
+@click.argument("address")
+@click.option(
+    "--temp",
+    "-t",
+    type=float,
+    required=True,
+    help="Constant target temperature.",
+)
+@click.option(
+    "--profile",
+    "-p",
+    type=click.IntRange(1, 3),
+    default=1,
+    help="Profile number to modify (1-3, default: 1).",
+)
+@click.option(
+    "--day",
+    "-d",
+    multiple=True,
+    help="Days to apply to (mon/tue/wed/thu/fri/sat/sun). Default: all days.",
+)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+def schedule_set_constant(
+    address: str,
+    temp: float,
+    profile: int,
+    day: tuple[str, ...],
+    yes: bool,
+) -> None:
+    """Set a constant temperature schedule (no night setback).
+
+    ADDRESS: Device address (e.g., LEQ0077156)
+
+    Creates a schedule with the same temperature 24/7.
+
+    Example: ccu schedule set-constant LEQ0077156 --temp 21
+    """
+    config = _get_config()
+    device_addr = address.split(":")[0]
+    days_list = list(day) if day else None
+
+    with get_backend() as backend:
+        interface = _get_device_interface(device_addr, backend)
+        device = backend.get_device(device_addr)
+        device_name = device.name if device else device_addr
+
+    new_schedule = create_constant_schedule(
+        profile=profile,
+        temperature=temp,
+        days=days_list,
+    )
+
+    days_str = ", ".join(day) if day else "all days"
+
+    if not yes:
+        console.print(f"[bold]Device:[/bold] {device_name} ({device_addr})")
+        console.print(f"[bold]Profile:[/bold] P{profile}")
+        console.print(f"[bold]Days:[/bold] {days_str}")
+        console.print()
+        console.print(f"Constant temperature: [green]{temp}°C[/green] (24h)")
+        console.print()
+
+        if not click.confirm("Apply this schedule?"):
+            console.print("Cancelled.")
+            return
+
+    params = build_schedule_params(new_schedule)
+
+    with XMLRPCClient(config, interface) as client:
+        try:
+            client.set_paramset(device_addr, "MASTER", params)
+            console.print(f"[green]OK[/green] Constant schedule set for P{profile}")
+        except XMLRPCError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@schedule.command("activate")
+@click.argument("address")
+@click.argument("profile", type=click.IntRange(1, 3))
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+def schedule_activate(address: str, profile: int, yes: bool) -> None:
+    """Activate a heating profile.
+
+    ADDRESS: Device address (e.g., LEQ0077156)
+    PROFILE: Profile number to activate (1, 2, or 3)
+
+    Example: ccu schedule activate LEQ0077156 1
+    """
+    config = _get_config()
+    device_addr = address.split(":")[0]
+
+    with get_backend() as backend:
+        interface = _get_device_interface(device_addr, backend)
+        device = backend.get_device(device_addr)
+        device_name = device.name if device else device_addr
+
+    if not yes:
+        console.print(f"[bold]Device:[/bold] {device_name} ({device_addr})")
+        console.print(f"[bold]Activate profile:[/bold] P{profile}")
+        console.print()
+
+        if not click.confirm("Activate this profile?"):
+            console.print("Cancelled.")
+            return
+
+    # WEEK_PROGRAM_POINTER is 0-indexed (0=P1, 1=P2, 2=P3)
+    params = {"WEEK_PROGRAM_POINTER": profile - 1}
+
+    with XMLRPCClient(config, interface) as client:
+        try:
+            client.set_paramset(device_addr, "MASTER", params)
+            console.print(f"[green]OK[/green] Profile P{profile} activated")
+        except XMLRPCError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
