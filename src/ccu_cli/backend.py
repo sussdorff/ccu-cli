@@ -544,22 +544,33 @@ class CCUBackend:
         Returns:
             List of devices in inbox (not yet accepted)
         """
-        # Inbox devices are in the device registry but have inbox_pending flag
-        # or can be found via the hub's inbox data points
-        devices = []
-        for dp in self.central.hub_coordinator.inbox_data_points:
-            # Each inbox device has a button data point
-            devices.append(
-                Device(
-                    address=dp.device_address,
-                    name=dp.name or dp.device_address,
-                    model="",  # Not available for inbox devices
-                    interface="",
-                    firmware="",
-                    available=True,
+
+        async def _fetch_and_list() -> list[Device]:
+            # Fetch latest inbox data
+            await self.central.hub_coordinator.fetch_inbox_data(scheduled=False)
+
+            # Access inbox_dp via the internal _hub
+            hub = self.central.hub_coordinator._hub  # type: ignore[attr-defined]
+            inbox_dp = hub.inbox_dp
+
+            if inbox_dp is None:
+                return []
+
+            devices = []
+            for inbox_device in inbox_dp.devices:
+                devices.append(
+                    Device(
+                        address=inbox_device.address,
+                        name=inbox_device.name or inbox_device.address,
+                        model=inbox_device.device_type or "",
+                        interface=inbox_device.interface or "",
+                        firmware="",
+                        available=True,
+                    )
                 )
-            )
-        return devices
+            return devices
+
+        return self._run_async(_fetch_and_list())
 
     def accept_inbox_device(self, device_address: str) -> bool:
         """Accept a device from the CCU inbox.
