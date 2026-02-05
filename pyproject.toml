@@ -5,7 +5,7 @@ description = "CLI tool for interacting with RaspberryMatic/CCU3"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "aiohomematic",
+    "aiohomematic>=2026.1.57",
     "click>=8.3.1",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.1",

@@ -110,9 +110,13 @@ class CCUBackend:
         if self._central is not None:
             return
 
-        config = self._get_central_config()
-        self._central = config.create_central()
-        self._run_async(self._central.start())
+        async def _start() -> None:
+            config = self._get_central_config()
+            # create_central() is async since aiohomematic 2026.2.x
+            self._central = await config.create_central()
+            await self._central.start()
+
+        self._run_async(_start())
 
     def stop(self) -> None:
         """Stop the backend connection."""
