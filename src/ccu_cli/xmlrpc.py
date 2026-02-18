@@ -204,6 +204,38 @@ class XMLRPCClient:
         except Exception as e:
             raise XMLRPCError(f"Failed to set link paramset: {e}") from e
 
+    def add_link(
+        self,
+        sender: str,
+        receiver: str,
+        name: str = "",
+        description: str = "",
+    ) -> None:
+        """Create a device link (Direktverknüpfung).
+
+        Args:
+            sender: Sender channel address (e.g., "JEQ0263339:1")
+            receiver: Receiver channel address (e.g., "REQ0666524:1")
+            name: Optional link name
+            description: Optional link description
+        """
+        try:
+            self.proxy.addLink(sender, receiver, name, description)
+        except Exception as e:
+            raise XMLRPCError(f"Failed to create link: {e}") from e
+
+    def remove_link(self, sender: str, receiver: str) -> None:
+        """Remove a device link.
+
+        Args:
+            sender: Sender channel address
+            receiver: Receiver channel address
+        """
+        try:
+            self.proxy.removeLink(sender, receiver)
+        except Exception as e:
+            raise XMLRPCError(f"Failed to remove link: {e}") from e
+
     def set_link_info(
         self, sender: str, receiver: str, name: str, description: str = ""
     ) -> None:

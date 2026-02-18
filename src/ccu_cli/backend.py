@@ -629,41 +629,39 @@ class CCUBackend:
         receiver: str,
         name: str = "",
         description: str = "",
+        interface: str = "HmIP-RF",
     ) -> None:
         """Create a device link (Direktverknüpfung).
+
+        Uses XML-RPC because aiohomematic does not expose addLink.
 
         Args:
             sender: Sender channel address
             receiver: Receiver channel address
             name: Optional link name
             description: Optional link description
+            interface: Interface to use ("HmIP-RF" or "BidCos-RF")
         """
+        with XMLRPCClient(self.config, interface) as client:
+            client.add_link(sender, receiver, name, description)
 
-        async def _add_link() -> None:
-            await self.central.add_link(
-                sender_address=sender,
-                receiver_address=receiver,
-                name=name,
-                description=description,
-            )
-
-        self._run_async(_add_link())
-
-    def delete_link(self, sender: str, receiver: str) -> None:
+    def delete_link(
+        self,
+        sender: str,
+        receiver: str,
+        interface: str = "HmIP-RF",
+    ) -> None:
         """Remove a device link.
+
+        Uses XML-RPC because aiohomematic does not expose removeLink.
 
         Args:
             sender: Sender channel address
             receiver: Receiver channel address
+            interface: Interface to use ("HmIP-RF" or "BidCos-RF")
         """
-
-        async def _remove_link() -> None:
-            await self.central.remove_link(
-                sender_address=sender,
-                receiver_address=receiver,
-            )
-
-        self._run_async(_remove_link())
+        with XMLRPCClient(self.config, interface) as client:
+            client.remove_link(sender, receiver)
 
     def list_links(
         self, address: str | None = None, interface: str = "HmIP-RF"

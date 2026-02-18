@@ -209,6 +209,65 @@ class TestSetLinkParamset:
             client.set_link_paramset("a", "b", {})
 
 
+class TestAddLink:
+    """Tests for XMLRPCClient.add_link()."""
+
+    def test_creates_link(self, mock_xmlrpc_client, mock_proxy):
+        """Should call addLink with correct arguments."""
+        mock_proxy.addLink.return_value = None
+
+        client = mock_xmlrpc_client("BidCos-RF")
+        client.add_link("JEQ0263339:1", "REQ0666524:1", "Test", "Desc")
+
+        mock_proxy.addLink.assert_called_once_with(
+            "JEQ0263339:1", "REQ0666524:1", "Test", "Desc"
+        )
+
+    def test_creates_link_without_name(self, mock_xmlrpc_client, mock_proxy):
+        """Should create link with empty name and description."""
+        mock_proxy.addLink.return_value = None
+
+        client = mock_xmlrpc_client()
+        client.add_link("SENDER:1", "RECEIVER:1")
+
+        mock_proxy.addLink.assert_called_once_with(
+            "SENDER:1", "RECEIVER:1", "", ""
+        )
+
+    def test_raises_on_error(self, mock_xmlrpc_client, mock_proxy):
+        """Should raise XMLRPCError on failure."""
+        mock_proxy.addLink.side_effect = Fault(1, "Unknown device")
+
+        client = mock_xmlrpc_client()
+
+        with pytest.raises(XMLRPCError, match="Failed to create link"):
+            client.add_link("a:1", "b:1")
+
+
+class TestRemoveLink:
+    """Tests for XMLRPCClient.remove_link()."""
+
+    def test_removes_link(self, mock_xmlrpc_client, mock_proxy):
+        """Should call removeLink with correct arguments."""
+        mock_proxy.removeLink.return_value = None
+
+        client = mock_xmlrpc_client("BidCos-RF")
+        client.remove_link("JEQ0263339:1", "REQ0666524:1")
+
+        mock_proxy.removeLink.assert_called_once_with(
+            "JEQ0263339:1", "REQ0666524:1"
+        )
+
+    def test_raises_on_error(self, mock_xmlrpc_client, mock_proxy):
+        """Should raise XMLRPCError on failure."""
+        mock_proxy.removeLink.side_effect = Fault(1, "Unknown Link")
+
+        client = mock_xmlrpc_client()
+
+        with pytest.raises(XMLRPCError, match="Failed to remove link"):
+            client.remove_link("a:1", "b:1")
+
+
 class TestXMLRPCClientContextManager:
     """Tests for XMLRPCClient context manager."""
 

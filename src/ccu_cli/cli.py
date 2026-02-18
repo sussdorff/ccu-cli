@@ -1198,7 +1198,16 @@ def link_get(sender: str, receiver: str, interface: str) -> None:
 @click.argument("receiver")
 @click.option("--name", "-n", default="", help="Link name")
 @click.option("--description", "-d", default="", help="Link description")
-def link_create(sender: str, receiver: str, name: str, description: str) -> None:
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default=None,
+    help="Interface to use (auto-detected from device if not specified)",
+)
+def link_create(
+    sender: str, receiver: str, name: str, description: str, interface: str | None
+) -> None:
     """Create a device link (Direktverknüpfung).
 
     SENDER: Sender channel address (e.g., 000B5D89B014D8:1)
@@ -1206,7 +1215,10 @@ def link_create(sender: str, receiver: str, name: str, description: str) -> None
     """
     with get_backend() as backend:
         try:
-            backend.create_link(sender, receiver, name, description)
+            if interface is None:
+                device_addr = sender.split(":")[0]
+                interface = _get_device_interface(device_addr, backend)
+            backend.create_link(sender, receiver, name, description, interface)
             console.print(f"[green]OK[/green] Created link: {sender} -> {receiver}")
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
@@ -1220,7 +1232,14 @@ def link_create(sender: str, receiver: str, name: str, description: str) -> None
 @click.argument("sender")
 @click.argument("receiver")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def link_delete(sender: str, receiver: str, yes: bool) -> None:
+@click.option(
+    "--interface",
+    "-i",
+    type=click.Choice(["HmIP-RF", "BidCos-RF"]),
+    default=None,
+    help="Interface to use (auto-detected from device if not specified)",
+)
+def link_delete(sender: str, receiver: str, yes: bool, interface: str | None) -> None:
     """Remove a device link.
 
     SENDER: Sender channel address
@@ -1233,7 +1252,10 @@ def link_delete(sender: str, receiver: str, yes: bool) -> None:
 
     with get_backend() as backend:
         try:
-            backend.delete_link(sender, receiver)
+            if interface is None:
+                device_addr = sender.split(":")[0]
+                interface = _get_device_interface(device_addr, backend)
+            backend.delete_link(sender, receiver, interface)
             console.print(f"[green]OK[/green] Removed link: {sender} -> {receiver}")
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
