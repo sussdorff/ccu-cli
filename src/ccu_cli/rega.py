@@ -356,6 +356,61 @@ if (room) {{
                 )
         return devices
 
+    def resolve_channel_addresses(self, address: str) -> list[RoomDevice]:
+        """Resolve channel ids for a channel or device address.
+
+        Args:
+            address: Exact channel address (e.g. ``ABC123:1``) or a device
+                address prefix (e.g. ``ABC123``)
+
+        Returns:
+            Matching channels as room-device references
+        """
+        script = """
+string channelId;
+foreach(channelId, dom.GetObject(ID_CHANNELS).EnumUsedIDs()) {
+    object channel = dom.GetObject(channelId);
+    if (channel) {
+        WriteLine(channel.ID() # ";" # channel.Name() # ";" # channel.Address());
+    }
+}
+"""
+        result = self.execute(script)
+        is_exact_channel = ":" in address
+        device_prefix = f"{address}:"
+        channels = []
+
+        for line in result.strip().split("\n"):
+            line = line.strip()
+            if not line or ";" not in line:
+                continue
+
+            parts = line.split(";", 2)
+            if len(parts) < 3:
+                continue
+
+            try:
+                channel_id = int(parts[0])
+            except ValueError:
+                continue
+
+            channel_address = parts[2]
+            if is_exact_channel:
+                if channel_address != address:
+                    continue
+            elif not channel_address.startswith(device_prefix):
+                continue
+
+            channels.append(
+                RoomDevice(
+                    id=channel_id,
+                    name=parts[1],
+                    address=channel_address,
+                )
+            )
+
+        return channels
+
     def get_device_room(self, channel_id: int) -> int | None:
         """Get the room ID for a device/channel.
 

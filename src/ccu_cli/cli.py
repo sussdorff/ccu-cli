@@ -844,6 +844,22 @@ def room() -> None:
     pass
 
 
+def _resolve_room_channel_refs(client: ReGaClient, channel_ref: str) -> list[Any]:
+    """Resolve room channel references from numeric ids or channel addresses."""
+    if channel_ref.isdigit():
+        return [{"id": int(channel_ref), "address": channel_ref}]
+
+    matches = client.resolve_channel_addresses(channel_ref)
+    if not matches:
+        raise ReGaError(f"No channels found for address: {channel_ref}")
+    if len(matches) > 1:
+        raise ReGaError(
+            f"Address {channel_ref} resolves to multiple channels. "
+            "Use a full channel address like ABC123:1 or run 'ccu room resolve-address'."
+        )
+    return [{"id": matches[0].id, "address": matches[0].address}]
+
+
 @room.command("list")
 def room_list() -> None:
     """List all rooms."""
@@ -970,17 +986,21 @@ def room_delete(room_id: int, yes: bool) -> None:
 
 @room.command("add-device")
 @click.argument("room_id", type=int)
-@click.argument("channel_id", type=int)
-def room_add_device(room_id: int, channel_id: int) -> None:
+@click.argument("channel_ref")
+def room_add_device(room_id: int, channel_ref: str) -> None:
     """Add a device/channel to a room.
 
     ROOM_ID: The room's internal ID
-    CHANNEL_ID: The channel's internal ID
+    CHANNEL_REF: Channel ID or exact channel address (e.g. ABC123:1)
     """
     with get_rega_client() as client:
         try:
-            client.add_device_to_room(room_id, channel_id)
-            console.print(f"[green]OK[/green] Added channel {channel_id} to room {room_id}")
+            resolved = _resolve_room_channel_refs(client, channel_ref)
+            channel = resolved[0]
+            client.add_device_to_room(room_id, channel["id"])
+            console.print(
+                f"[green]OK[/green] Added channel {channel['address']} to room {room_id}"
+            )
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -991,17 +1011,21 @@ def room_add_device(room_id: int, channel_id: int) -> None:
 
 @room.command("remove-device")
 @click.argument("room_id", type=int)
-@click.argument("channel_id", type=int)
-def room_remove_device(room_id: int, channel_id: int) -> None:
+@click.argument("channel_ref")
+def room_remove_device(room_id: int, channel_ref: str) -> None:
     """Remove a device/channel from a room.
 
     ROOM_ID: The room's internal ID
-    CHANNEL_ID: The channel's internal ID
+    CHANNEL_REF: Channel ID or exact channel address (e.g. ABC123:1)
     """
     with get_rega_client() as client:
         try:
-            client.remove_device_from_room(room_id, channel_id)
-            console.print(f"[green]OK[/green] Removed channel {channel_id} from room {room_id}")
+            resolved = _resolve_room_channel_refs(client, channel_ref)
+            channel = resolved[0]
+            client.remove_device_from_room(room_id, channel["id"])
+            console.print(
+                f"[green]OK[/green] Removed channel {channel['address']} from room {room_id}"
+            )
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -1026,6 +1050,38 @@ def room_devices(room_id: int) -> None:
                 return
 
             table = Table(title=f"Devices in Room {room_id}")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Address", style="yellow")
+
+            for dev in devices:
+                table.add_row(str(dev.id), dev.name, dev.address)
+
+            console.print(table)
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("resolve-address")
+@click.argument("address")
+def room_resolve_address(address: str) -> None:
+    """Resolve channel ids for a CCU address.
+
+    ADDRESS: Exact channel address (e.g. ABC123:1) or device address (e.g. ABC123)
+    """
+    with get_rega_client() as client:
+        try:
+            devices = client.resolve_channel_addresses(address)
+
+            if not devices:
+                error_console.print(f"[red]Error:[/red] No channels found for address: {address}")
+                sys.exit(1)
+
+            table = Table(title=f"Resolved Channels for {address}")
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="green")
             table.add_column("Address", style="yellow")

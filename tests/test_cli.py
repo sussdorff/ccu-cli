@@ -450,6 +450,95 @@ class TestRoomDeleteCommand:
         assert "Room not found" in result.output
 
 
+class TestRoomResolveAddressCommand:
+    """Tests for 'ccu room resolve-address' command."""
+
+    def test_displays_matching_channels(self, runner, mock_rega_context):
+        """Should show matching channel ids for an address."""
+        from ccu_cli.rega import RoomDevice
+
+        mock_rega_context.resolve_channel_addresses.return_value = [
+            RoomDevice(id=1001, name="Living Room Light", address="ABC123:1"),
+            RoomDevice(id=1002, name="Living Room Switch", address="ABC123:2"),
+        ]
+
+        result = runner.invoke(main, ["room", "resolve-address", "ABC123"])
+
+        assert result.exit_code == 0
+        assert "1001" in result.output
+        assert "ABC123:1" in result.output
+        assert "1002" in result.output
+        assert "ABC123:2" in result.output
+        mock_rega_context.resolve_channel_addresses.assert_called_once_with("ABC123")
+
+    def test_fails_when_no_channels_match(self, runner, mock_rega_context):
+        """Should show an error when no channels match the address."""
+        mock_rega_context.resolve_channel_addresses.return_value = []
+
+        result = runner.invoke(main, ["room", "resolve-address", "ABC123"])
+
+        assert result.exit_code != 0
+        assert "No channels found" in result.output
+
+
+class TestRoomAddDeviceCommand:
+    """Tests for 'ccu room add-device' command."""
+
+    def test_adds_numeric_channel_id(self, runner, mock_rega_context):
+        """Should keep accepting raw numeric channel ids."""
+        result = runner.invoke(main, ["room", "add-device", "1234", "5678"])
+
+        assert result.exit_code == 0
+        mock_rega_context.add_device_to_room.assert_called_once_with(1234, 5678)
+
+    def test_resolves_channel_address(self, runner, mock_rega_context):
+        """Should resolve an exact channel address before adding it."""
+        from ccu_cli.rega import RoomDevice
+
+        mock_rega_context.resolve_channel_addresses.return_value = [
+            RoomDevice(id=5678, name="Living Room Light", address="ABC123:1"),
+        ]
+
+        result = runner.invoke(main, ["room", "add-device", "1234", "ABC123:1"])
+
+        assert result.exit_code == 0
+        mock_rega_context.resolve_channel_addresses.assert_called_once_with("ABC123:1")
+        mock_rega_context.add_device_to_room.assert_called_once_with(1234, 5678)
+
+    def test_rejects_ambiguous_device_address(self, runner, mock_rega_context):
+        """Should ask for a full channel address when multiple matches exist."""
+        from ccu_cli.rega import RoomDevice
+
+        mock_rega_context.resolve_channel_addresses.return_value = [
+            RoomDevice(id=1001, name="Channel 1", address="ABC123:1"),
+            RoomDevice(id=1002, name="Channel 2", address="ABC123:2"),
+        ]
+
+        result = runner.invoke(main, ["room", "add-device", "1234", "ABC123"])
+
+        assert result.exit_code != 0
+        assert "multiple channels" in result.output
+        mock_rega_context.add_device_to_room.assert_not_called()
+
+
+class TestRoomRemoveDeviceCommand:
+    """Tests for 'ccu room remove-device' command."""
+
+    def test_resolves_channel_address(self, runner, mock_rega_context):
+        """Should resolve an exact channel address before removing it."""
+        from ccu_cli.rega import RoomDevice
+
+        mock_rega_context.resolve_channel_addresses.return_value = [
+            RoomDevice(id=5678, name="Living Room Light", address="ABC123:1"),
+        ]
+
+        result = runner.invoke(main, ["room", "remove-device", "1234", "ABC123:1"])
+
+        assert result.exit_code == 0
+        mock_rega_context.resolve_channel_addresses.assert_called_once_with("ABC123:1")
+        mock_rega_context.remove_device_from_room.assert_called_once_with(1234, 5678)
+
+
 class TestLinkListCommand:
     """Tests for 'ccu link list' command."""
 

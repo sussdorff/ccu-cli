@@ -344,6 +344,56 @@ class TestListRoomDevices:
         assert len(devices) == 2
 
 
+class TestResolveChannelAddresses:
+    """Tests for ReGaClient.resolve_channel_addresses()."""
+
+    def test_resolves_exact_channel_address(self, mock_rega_client):
+        """Should return the matching channel for an exact address."""
+
+        def handler(request):
+            output = (
+                "1001;Living Room Light;ABC123:1\n"
+                "1002;Living Room Switch;ABC123:2\n"
+            )
+            return Response(200, text=output + "<xml><r><v>x</v></r></xml>")
+
+        client = mock_rega_client(handler)
+        devices = client.resolve_channel_addresses("ABC123:2")
+
+        assert devices == [RoomDevice(id=1002, name="Living Room Switch", address="ABC123:2")]
+
+    def test_resolves_all_channels_for_device_address(self, mock_rega_client):
+        """Should return all channels for a device address prefix."""
+
+        def handler(request):
+            output = (
+                "1001;Living Room Light;ABC123:1\n"
+                "1002;Living Room Switch;ABC123:2\n"
+                "1003;Other Device;DEF456:1\n"
+            )
+            return Response(200, text=output + "<xml><r><v>x</v></r></xml>")
+
+        client = mock_rega_client(handler)
+        devices = client.resolve_channel_addresses("ABC123")
+
+        assert devices == [
+            RoomDevice(id=1001, name="Living Room Light", address="ABC123:1"),
+            RoomDevice(id=1002, name="Living Room Switch", address="ABC123:2"),
+        ]
+
+    def test_skips_xml_and_malformed_lines(self, mock_rega_client):
+        """Should ignore xml trailers and malformed output lines."""
+
+        def handler(request):
+            output = "1001;Living Room Light;ABC123:1\nmalformed\n<xml><r><v>x</v></r></xml>"
+            return Response(200, text=output)
+
+        client = mock_rega_client(handler)
+        devices = client.resolve_channel_addresses("ABC123")
+
+        assert devices == [RoomDevice(id=1001, name="Living Room Light", address="ABC123:1")]
+
+
 class TestGetDeviceRoom:
     """Tests for ReGaClient.get_device_room()."""
 
