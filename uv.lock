@@ -13,16 +13,16 @@ wheels = [
 
 [[package]]
 name = "aiohomematic"
-version = "2026.2.3"
+version = "2026.4.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "pydantic" },
     { name = "python-slugify" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b0/c4/33432dd03e6f13fc6a6ce55efce82afc6075342435474d13eb8e98e3fa64/aiohomematic-2026.2.3.tar.gz", hash = "sha256:9907f4c66036255ce3bc64dbaa4f0862b68d82b74815cc4d4c1c971aa02484a8", size = 501627, upload-time = "2026-02-03T18:48:05.877Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/b5/ac4a49b158ab75b7b07292562f134795d8a8e310ff77fc9e0c2a4b5d6285/aiohomematic-2026.4.13.tar.gz", hash = "sha256:d007949d63a3887fa07ad2a892c561f6428a867cbbc1933a7ff74ff7662d3e9f", size = 888570, upload-time = "2026-04-15T10:03:21.94Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/e6/8a30fc26aa65fcdfa1ede8e85d3c1b17f155247b7a1521e98091729bd2b5/aiohomematic-2026.2.3-py3-none-any.whl", hash = "sha256:834926d8207bfad777381f96e98acc052a3dfe6a696617487215dedda2e9d4da", size = 608839, upload-time = "2026-02-03T18:48:04.171Z" },
+    { url = "https://files.pythonhosted.org/packages/54/3b/202b554bd9a937a019ff780119d297d038ca2eed282d0db4d6c1e929fcb0/aiohomematic-2026.4.13-py3-none-any.whl", hash = "sha256:af54106f235f0a8184eb9711b4ed7f1586d6c703ec24eaba96ab7302d12e79d8", size = 1010840, upload-time = "2026-04-15T10:03:19.802Z" },
 ]
 
 [[package]]
@@ -139,7 +139,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohomematic", specifier = ">=2026.1.57" },
+    { name = "aiohomematic", specifier = ">=2026.4.10" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "python-dotenv", specifier = ">=1.2.1" },

@@ -66,6 +66,12 @@ class TestXMLRPCClientInit:
         client = XMLRPCClient(xmlrpc_config)
         assert ":2010" in client.base_url
 
+    def test_uses_virtual_devices_port_for_groups(self, xmlrpc_config):
+        """Should use VirtualDevices port 9292 for groups."""
+        client = XMLRPCClient(xmlrpc_config, interface="VirtualDevices")
+        assert client.port == 9292
+        assert client.base_url.endswith(":9292/groups")
+
 
 class TestGetLinks:
     """Tests for XMLRPCClient.get_links()."""
@@ -267,6 +273,70 @@ class TestRemoveLink:
         with pytest.raises(XMLRPCError, match="Failed to remove link"):
             client.remove_link("a:1", "b:1")
 
+
+class TestDeleteDevice:
+    """Tests for XMLRPCClient.delete_device()."""
+
+    def test_deletes_virtual_device(self, mock_xmlrpc_client, mock_proxy):
+        """Should call deleteDevice with the correct address."""
+        mock_proxy.deleteDevice.return_value = None
+
+        client = mock_xmlrpc_client("VirtualDevices")
+        client.delete_device("INT0000003")
+
+        mock_proxy.deleteDevice.assert_called_once_with("INT0000003")
+
+    def test_raises_on_error(self, mock_xmlrpc_client, mock_proxy):
+        """Should raise XMLRPCError on failure."""
+        mock_proxy.deleteDevice.side_effect = Fault(1, "Unknown device")
+
+        client = mock_xmlrpc_client("VirtualDevices")
+
+        with pytest.raises(XMLRPCError, match="Failed to delete device"):
+            client.delete_device("INT0000003")
+
+
+class TestGroupDevices:
+    """Tests for VirtualDevices device inspection."""
+
+    def test_lists_virtual_devices(self, mock_xmlrpc_client, mock_proxy):
+        """Should return raw device entries from listDevices."""
+        mock_proxy.listDevices.return_value = [
+            {"ADDRESS": "INT0000003", "TYPE": "HmIP-HEATING"},
+            {"ADDRESS": "INT0000003:1", "TYPE": "HEATING_CLIMATECONTROL_TRANSCEIVER"},
+        ]
+
+        client = mock_xmlrpc_client("VirtualDevices")
+
+        assert client.list_devices() == [
+            {"ADDRESS": "INT0000003", "TYPE": "HmIP-HEATING"},
+            {"ADDRESS": "INT0000003:1", "TYPE": "HEATING_CLIMATECONTROL_TRANSCEIVER"},
+        ]
+        mock_proxy.listDevices.assert_called_once_with()
+
+    def test_reads_device_description(self, mock_xmlrpc_client, mock_proxy):
+        """Should return raw device description."""
+        mock_proxy.getDeviceDescription.return_value = {
+            "ADDRESS": "INT0000003",
+            "CHILDREN": ["INT0000003:0", "INT0000003:1"],
+        }
+
+        client = mock_xmlrpc_client("VirtualDevices")
+
+        assert client.get_device_description("INT0000003") == {
+            "ADDRESS": "INT0000003",
+            "CHILDREN": ["INT0000003:0", "INT0000003:1"],
+        }
+        mock_proxy.getDeviceDescription.assert_called_once_with("INT0000003")
+
+    def test_raises_when_listing_virtual_devices_fails(self, mock_xmlrpc_client, mock_proxy):
+        """Should raise XMLRPCError on listDevices failure."""
+        mock_proxy.listDevices.side_effect = Fault(1, "Boom")
+
+        client = mock_xmlrpc_client("VirtualDevices")
+
+        with pytest.raises(XMLRPCError, match="Failed to list devices"):
+            client.list_devices()
 
 class TestXMLRPCClientContextManager:
     """Tests for XMLRPCClient context manager."""

@@ -32,7 +32,7 @@ console = Console()
 error_console = Console(stderr=True)
 
 
-def get_backend() -> CCUBackend:
+def get_backend(enable_virtual_devices: bool = False) -> CCUBackend:
     """Create a CCU backend with loaded configuration.
 
     Raises:
@@ -44,7 +44,7 @@ def get_backend() -> CCUBackend:
     except ConfigurationError as e:
         error_console.print(f"[red]Configuration Error:[/red] {e}")
         sys.exit(1)
-    return CCUBackend(config)
+    return CCUBackend(config, include_virtual_devices=enable_virtual_devices)
 
 
 def get_rega_client() -> ReGaClient:
@@ -60,6 +60,17 @@ def get_rega_client() -> ReGaClient:
         error_console.print(f"[red]Configuration Error:[/red] {e}")
         sys.exit(1)
     return ReGaClient(config)
+
+
+def get_group_xmlrpc_client() -> XMLRPCClient:
+    """Create an XML-RPC client for the CCU heating groups endpoint."""
+    config = load_config()
+    try:
+        config.validate()
+    except ConfigurationError as e:
+        error_console.print(f"[red]Configuration Error:[/red] {e}")
+        sys.exit(1)
+    return XMLRPCClient(config, interface="VirtualDevices")
 
 
 def print_json(data: Any) -> None:
@@ -834,18 +845,18 @@ def program_disable(id_or_name: str) -> None:
 
 
 # =============================================================================
-# Room Commands
+# Channel Commands
 # =============================================================================
 
 
 @main.group()
-def room() -> None:
-    """Manage CCU rooms."""
+def channel() -> None:
+    """Manage CCU channels."""
     pass
 
 
-def _resolve_room_channel_refs(client: ReGaClient, channel_ref: str) -> list[Any]:
-    """Resolve room channel references from numeric ids or channel addresses."""
+def _resolve_channel_refs(client: ReGaClient, channel_ref: str) -> list[Any]:
+    """Resolve channel references from numeric ids or channel addresses."""
     if channel_ref.isdigit():
         return [{"id": int(channel_ref), "address": channel_ref}]
 
@@ -858,6 +869,42 @@ def _resolve_room_channel_refs(client: ReGaClient, channel_ref: str) -> list[Any
             "Use a full channel address like ABC123:1 or run 'ccu room resolve-address'."
         )
     return [{"id": matches[0].id, "address": matches[0].address}]
+
+
+@channel.command("rename")
+@click.argument("channel_ref")
+@click.argument("new_name")
+def channel_rename(channel_ref: str, new_name: str) -> None:
+    """Rename a channel by ReGa object id or exact channel address.
+
+    CHANNEL_REF: Numeric channel ID or exact channel address (e.g. ABC123:1)
+    NEW_NAME: New channel name
+    """
+    with get_rega_client() as client:
+        try:
+            resolved = _resolve_channel_refs(client, channel_ref)
+            channel_obj = resolved[0]
+            client.rename_channel(channel_obj["id"], new_name)
+            console.print(
+                f"[green]OK[/green] Renamed channel {channel_obj['address']} to '{new_name}'"
+            )
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Room Commands
+# =============================================================================
+
+
+@main.group()
+def room() -> None:
+    """Manage CCU rooms."""
+    pass
 
 
 @room.command("list")
@@ -995,7 +1042,7 @@ def room_add_device(room_id: int, channel_ref: str) -> None:
     """
     with get_rega_client() as client:
         try:
-            resolved = _resolve_room_channel_refs(client, channel_ref)
+            resolved = _resolve_channel_refs(client, channel_ref)
             channel = resolved[0]
             client.add_device_to_room(room_id, channel["id"])
             console.print(
@@ -1020,7 +1067,7 @@ def room_remove_device(room_id: int, channel_ref: str) -> None:
     """
     with get_rega_client() as client:
         try:
-            resolved = _resolve_room_channel_refs(client, channel_ref)
+            resolved = _resolve_channel_refs(client, channel_ref)
             channel = resolved[0]
             client.remove_device_from_room(room_id, channel["id"])
             console.print(
@@ -1091,6 +1138,154 @@ def room_resolve_address(address: str) -> None:
 
             console.print(table)
         except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+# =============================================================================
+# Group Commands
+# =============================================================================
+
+
+@main.group()
+def group() -> None:
+    """Manage heating groups."""
+    pass
+
+
+@group.command("list")
+def group_list() -> None:
+    """List heating groups from the VirtualDevices interface."""
+    with get_backend(enable_virtual_devices=True) as backend:
+        try:
+            groups = backend.list_groups()
+
+            if not groups:
+                console.print("No heating groups found.")
+                return
+
+            table = Table(title="Heating Groups")
+            table.add_column("Address", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Model", style="yellow")
+            table.add_column("Available", style="magenta")
+
+            for grp in groups:
+                available = "✓" if grp.available else "✗"
+                table.add_row(grp.address, grp.name, grp.model, available)
+
+            console.print(table)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@group.command("get")
+@click.argument("address")
+def group_get(address: str) -> None:
+    """Show heating group details.
+
+    ADDRESS: Virtual group address (e.g. INT0000003)
+    """
+    with get_backend(enable_virtual_devices=True) as backend:
+        try:
+            grp = backend.get_group(address)
+            if grp is None:
+                error_console.print(f"[red]Error:[/red] Group not found: {address}")
+                sys.exit(1)
+
+            info_table = Table(title=f"Heating Group: {grp.name}")
+            info_table.add_column("Property", style="cyan")
+            info_table.add_column("Value", style="green")
+
+            info_table.add_row("Address", grp.address)
+            info_table.add_row("Name", grp.name)
+            info_table.add_row("Model", grp.model)
+            info_table.add_row("Interface", grp.interface)
+            info_table.add_row("Firmware", grp.firmware)
+            info_table.add_row("Available", "Yes" if grp.available else "No")
+
+            console.print(info_table)
+
+            members = backend.get_group_members(address)
+            if members:
+                console.print()
+                member_table = Table(title="Group Members")
+                member_table.add_column("Address", style="yellow")
+                member_table.add_column("Name", style="green")
+                member_table.add_column("Model", style="cyan")
+                member_table.add_column("Type", style="magenta")
+
+                for member in members:
+                    member_table.add_row(
+                        member.address,
+                        member.name,
+                        member.model,
+                        member.member_type,
+                    )
+
+                console.print(member_table)
+
+            channels = backend.get_group_channels(address)
+            if channels:
+                console.print()
+                ch_table = Table(title="Channels")
+                ch_table.add_column("No", style="cyan")
+                ch_table.add_column("Type", style="magenta")
+                ch_table.add_column("Address", style="yellow")
+                ch_table.add_column("Name", style="green")
+
+                for ch in channels:
+                    ch_table.add_row(str(ch.channel_no), ch.channel_type, ch.address, ch.name)
+
+                console.print(ch_table)
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@group.command("delete")
+@click.argument("address")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def group_delete(address: str, yes: bool) -> None:
+    """Delete a heating group.
+
+    ADDRESS: Virtual group address (e.g. INT0000003)
+    """
+    with get_backend(enable_virtual_devices=True) as backend:
+        try:
+            grp = backend.get_group(address)
+            if grp is None:
+                error_console.print(f"[red]Error:[/red] Group not found: {address}")
+                sys.exit(1)
+
+            if not yes:
+                if not click.confirm(
+                    f"Delete heating group '{grp.name}' ({grp.address})?"
+                ):
+                    console.print("Cancelled")
+                    return
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+    with get_group_xmlrpc_client() as client:
+        try:
+            client.delete_device(address)
+            console.print(f"[green]OK[/green] Deleted heating group {address}")
+        except XMLRPCError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
         except Exception as e:

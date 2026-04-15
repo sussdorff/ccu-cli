@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any
 from xmlrpc.client import ServerProxy
 
+from aiohomematic.support import build_xml_rpc_headers, build_xml_rpc_uri
+
 from .config import CCUConfig
 
 
@@ -54,6 +56,7 @@ class XMLRPCClient:
 
     PORT_BIDCOS_RF = 2001
     PORT_HMIP_RF = 2010
+    PORT_VIRTUAL_DEVICES = 9292
 
     def __init__(self, config: CCUConfig, interface: str = "HmIP-RF"):
         """Initialize XML-RPC client.
@@ -71,7 +74,16 @@ class XMLRPCClient:
         """Return the port for the current interface."""
         if self.interface == "BidCos-RF":
             return self.PORT_BIDCOS_RF
+        if self.interface == "VirtualDevices":
+            return self.PORT_VIRTUAL_DEVICES
         return self.PORT_HMIP_RF
+
+    @property
+    def path(self) -> str:
+        """Return the XML-RPC path for the current interface."""
+        if self.interface == "VirtualDevices":
+            return "/groups"
+        return ""
 
     @property
     def base_url(self) -> str:
@@ -80,13 +92,24 @@ class XMLRPCClient:
         Note: CCU XML-RPC API (ports 2001, 2010) always uses HTTP,
         regardless of the HTTPS setting which only applies to the web interface.
         """
-        return f"http://{self.config.host}:{self.port}"
+        return build_xml_rpc_uri(
+            host=self.config.host,
+            port=self.port,
+            path=self.path,
+            tls=False,
+        )
 
     @property
     def proxy(self) -> ServerProxy:
         """Lazy-initialize XML-RPC proxy."""
         if self._proxy is None:
-            self._proxy = ServerProxy(self.base_url)
+            self._proxy = ServerProxy(
+                self.base_url,
+                headers=build_xml_rpc_headers(
+                    username=self.config.username or "",
+                    password=self.config.password or "",
+                ),
+            )
         return self._proxy
 
     def close(self) -> None:
@@ -129,6 +152,20 @@ class XMLRPCClient:
                 )
             )
         return links
+
+    def list_devices(self) -> list[dict[str, Any]]:
+        """List raw device entries for the current XML-RPC interface."""
+        try:
+            return self.proxy.listDevices()
+        except Exception as e:
+            raise XMLRPCError(f"Failed to list devices: {e}") from e
+
+    def get_device_description(self, address: str) -> dict[str, Any]:
+        """Get the raw device description for an address."""
+        try:
+            return self.proxy.getDeviceDescription(address)
+        except Exception as e:
+            raise XMLRPCError(f"Failed to get device description: {e}") from e
 
     def get_link_info(self, sender: str, receiver: str) -> LinkInfo | None:
         """Get detailed information about a specific link.
@@ -235,6 +272,17 @@ class XMLRPCClient:
             self.proxy.removeLink(sender, receiver)
         except Exception as e:
             raise XMLRPCError(f"Failed to remove link: {e}") from e
+
+    def delete_device(self, address: str) -> None:
+        """Delete a virtual device, such as a heating group.
+
+        Args:
+            address: Virtual device address (e.g. ``INT0000003``)
+        """
+        try:
+            self.proxy.deleteDevice(address)
+        except Exception as e:
+            raise XMLRPCError(f"Failed to delete device: {e}") from e
 
     def set_link_info(
         self, sender: str, receiver: str, name: str, description: str = ""

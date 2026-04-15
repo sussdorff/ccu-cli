@@ -68,14 +68,27 @@ ccu device list
 # Show device details
 ccu device get <address>
 
-# Rename a channel
-ccu device rename <channel-id> <new-name>
+# Rename a device
+ccu device rename <address> <new-name>
+
+# Rename a device and all channels to name:channel_no
+ccu device rename --include-channels <address> <new-name>
 
 # Show channel configuration (MASTER paramset)
 ccu device config <address>:<channel>
 
 # Refresh hub data (programs, sysvars) from CCU
 ccu device refresh
+```
+
+### Channel Management
+
+```bash
+# Rename a channel by ReGa object id
+ccu channel rename <channel-id> <new-name>
+
+# Rename a channel by exact channel address
+ccu channel rename <address>:<channel> <new-name>
 ```
 
 ### Datapoints
@@ -163,6 +176,27 @@ ccu link config set <sender> <receiver> PARAM=value [PARAM2=value2 ...]
 # Set parameters on sender/button side
 ccu link config set --side sender <sender> <receiver> PARAM=value
 ```
+
+### Heating Groups
+
+Inspect existing heating groups from the CCU `VirtualDevices`/`/groups` interface.
+`group get` also resolves the configured member devices via CCU JSON-RPC.
+
+```bash
+# List existing heating groups
+ccu group list
+
+# Show details, member devices, and channels for a group
+ccu group get <group-address>
+
+# Delete a group
+ccu group delete <group-address> [--yes]
+```
+
+Examples of group addresses are `INT0000003` or `INT0000001`.
+
+Note: creating heating groups is not implemented yet. The current CLI support
+focuses on discovering and inspecting existing groups, plus deleting them.
 
 ### Thermostat Schedules (Wochenprogramme)
 

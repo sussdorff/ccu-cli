@@ -5,7 +5,14 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock
 
 from ccu_cli.cli import main
-from ccu_cli.backend import Channel, DataPoint, Device, Program as BackendProgram, SysVar
+from ccu_cli.backend import (
+    Channel,
+    DataPoint,
+    Device,
+    HeatingGroupMember,
+    Program as BackendProgram,
+    SysVar,
+)
 
 
 @pytest.fixture
@@ -20,6 +27,7 @@ def mock_backend_context(mocker):
     mock = MagicMock()
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=False)
+    mock.get_group_members.return_value = []
     mocker.patch("ccu_cli.cli.get_backend", return_value=mock)
     return mock
 
@@ -31,6 +39,16 @@ def mock_rega_context(mocker):
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=False)
     mocker.patch("ccu_cli.cli.get_rega_client", return_value=mock)
+    return mock
+
+
+@pytest.fixture
+def mock_group_xmlrpc_context(mocker):
+    """Mock get_group_xmlrpc_client to return a controllable mock."""
+    mock = MagicMock()
+    mock.__enter__ = MagicMock(return_value=mock)
+    mock.__exit__ = MagicMock(return_value=False)
+    mocker.patch("ccu_cli.cli.get_group_xmlrpc_client", return_value=mock)
     return mock
 
 
@@ -539,6 +557,166 @@ class TestRoomRemoveDeviceCommand:
         mock_rega_context.remove_device_from_room.assert_called_once_with(1234, 5678)
 
 
+class TestGroupListCommand:
+    """Tests for 'ccu group list' command."""
+
+    def test_displays_groups_table(self, runner, mock_backend_context):
+        """Should display discovered heating groups."""
+        mock_backend_context.list_groups.return_value = [
+            Device(
+                address="INT0000003",
+                name="Bad Jenny INT0000003",
+                model="HmIP-HEATING",
+                interface="VirtualDevices",
+                firmware="2.0.0",
+                available=True,
+            ),
+            Device(
+                address="INT0000001",
+                name="Wohnzimmer INT0000001",
+                model="HM-CC-VG-1",
+                interface="VirtualDevices",
+                firmware="1.3",
+                available=True,
+            ),
+        ]
+
+        result = runner.invoke(main, ["group", "list"])
+
+        assert result.exit_code == 0
+        assert "INT0000003" in result.output
+        assert "Bad Jenny INT0000003" in result.output
+        assert "INT0000001" in result.output
+        assert "Wohnzimmer INT0000001" in result.output
+
+    def test_shows_no_groups_message(self, runner, mock_backend_context):
+        """Should display a message when no groups exist."""
+        mock_backend_context.list_groups.return_value = []
+
+        result = runner.invoke(main, ["group", "list"])
+
+        assert result.exit_code == 0
+        assert "No heating groups found" in result.output
+
+
+class TestGroupGetCommand:
+    """Tests for 'ccu group get' command."""
+
+    def test_displays_group_details(self, runner, mock_backend_context):
+        """Should display group properties, channels, and group members."""
+        mock_backend_context.get_group.return_value = Device(
+            address="INT0000003",
+            name="Bad Jenny INT0000003",
+            model="HmIP-HEATING",
+            interface="VirtualDevices",
+            firmware="2.0.0",
+            available=True,
+        )
+        mock_backend_context.get_group_channels.return_value = [
+            Channel(
+                address="INT0000003:1",
+                name="Bad Jenny INT0000003:1",
+                channel_no=1,
+                channel_type="HEATING_CLIMATECONTROL_TRANSCEIVER",
+            ),
+            Channel(
+                address="INT0000003:6",
+                name="Bad Jenny INT0000003:6",
+                channel_no=6,
+                channel_type="CLIMATECONTROL_FLOOR_TRANSCEIVER",
+            ),
+        ]
+        mock_backend_context.get_group_members.return_value = [
+            HeatingGroupMember(
+                address="000A1D89A64183:1",
+                member_type="RADIATOR_THERMOSTAT",
+                name="Bad HKT",
+                model="HmIP-eTRV-B-2 R4M",
+            ),
+            HeatingGroupMember(
+                address="000CA0C9A7420C:1",
+                member_type="WALLMOUNTED_THERMOSTAT",
+                name="Bad WTH",
+                model="HmIP-WTH-B-2",
+            ),
+        ]
+
+        result = runner.invoke(main, ["group", "get", "INT0000003"])
+
+        assert result.exit_code == 0
+        assert "Bad Jenny INT0000003" in result.output
+        assert "HmIP-HEATING" in result.output
+        assert "INT0000003:1" in result.output
+        assert "INT0000003:6" in result.output
+        assert "Group Members" in result.output
+        assert "000A1D89A64183:1" in result.output
+        assert "Bad HKT" in result.output
+        assert "RADIATOR_THERMOSTAT" in result.output
+
+    def test_handles_group_not_found(self, runner, mock_backend_context):
+        """Should show error when group is missing."""
+        mock_backend_context.get_group.return_value = None
+
+        result = runner.invoke(main, ["group", "get", "INT9999999"])
+
+        assert result.exit_code != 0
+        assert "Group not found" in result.output
+
+
+class TestGroupDeleteCommand:
+    """Tests for 'ccu group delete' command."""
+
+    def test_deletes_group_with_confirmation(
+        self, runner, mock_backend_context, mock_group_xmlrpc_context
+    ):
+        """Should delete group after confirmation."""
+        mock_backend_context.get_group.return_value = Device(
+            address="INT0000003",
+            name="Bad Jenny INT0000003",
+            model="HmIP-HEATING",
+            interface="VirtualDevices",
+            firmware="2.0.0",
+            available=True,
+        )
+
+        result = runner.invoke(main, ["group", "delete", "INT0000003"], input="y\n")
+
+        assert result.exit_code == 0
+        assert "Deleted heating group" in result.output
+        mock_group_xmlrpc_context.delete_device.assert_called_once_with("INT0000003")
+
+    def test_cancels_without_confirmation(
+        self, runner, mock_backend_context, mock_group_xmlrpc_context
+    ):
+        """Should not delete group if confirmation is declined."""
+        mock_backend_context.get_group.return_value = Device(
+            address="INT0000003",
+            name="Bad Jenny INT0000003",
+            model="HmIP-HEATING",
+            interface="VirtualDevices",
+            firmware="2.0.0",
+            available=True,
+        )
+
+        result = runner.invoke(main, ["group", "delete", "INT0000003"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        mock_group_xmlrpc_context.delete_device.assert_not_called()
+
+    def test_handles_group_not_found(
+        self, runner, mock_backend_context, mock_group_xmlrpc_context
+    ):
+        """Should show error when group is missing."""
+        mock_backend_context.get_group.return_value = None
+
+        result = runner.invoke(main, ["group", "delete", "--yes", "INT9999999"])
+
+        assert result.exit_code != 0
+        assert "Group not found" in result.output
+        mock_group_xmlrpc_context.delete_device.assert_not_called()
+
+
 class TestLinkListCommand:
     """Tests for 'ccu link list' command."""
 
@@ -812,14 +990,74 @@ class TestLinkConfigSetCommand:
 class TestDeviceRenameCommand:
     """Tests for 'ccu device rename' command."""
 
-    def test_renames_channel(self, runner, mock_rega_context):
-        """Should rename channel and display success message."""
-        result = runner.invoke(main, ["device", "rename", "1234", "New Name"])
+    def test_renames_device(self, runner, mock_backend_context):
+        """Should rename a device and display success message."""
+        mock_backend_context.rename_device.return_value = True
+
+        result = runner.invoke(main, ["device", "rename", "NEQ123", "New Name"])
+
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        assert "New Name" in result.output
+        mock_backend_context.rename_device.assert_called_once_with(
+            "NEQ123", "New Name", False
+        )
+
+    def test_can_rename_device_channels_too(self, runner, mock_backend_context):
+        """Should forward the include-channels flag to the backend."""
+        mock_backend_context.rename_device.return_value = True
+
+        result = runner.invoke(
+            main,
+            ["device", "rename", "--include-channels", "NEQ123", "New Name"],
+        )
+
+        assert result.exit_code == 0
+        mock_backend_context.rename_device.assert_called_once_with(
+            "NEQ123", "New Name", True
+        )
+
+
+class TestChannelRenameCommand:
+    """Tests for 'ccu channel rename' command."""
+
+    def test_renames_numeric_channel_id(self, runner, mock_rega_context):
+        """Should rename a channel by numeric ReGa object id."""
+        result = runner.invoke(main, ["channel", "rename", "1234", "New Name"])
 
         assert result.exit_code == 0
         assert "OK" in result.output
         assert "New Name" in result.output
         mock_rega_context.rename_channel.assert_called_once_with(1234, "New Name")
+
+    def test_resolves_exact_channel_address(self, runner, mock_rega_context):
+        """Should resolve a concrete channel address before renaming."""
+        from ccu_cli.rega import RoomDevice
+
+        mock_rega_context.resolve_channel_addresses.return_value = [
+            RoomDevice(id=5678, name="Old Name", address="ABC123:1")
+        ]
+
+        result = runner.invoke(main, ["channel", "rename", "ABC123:1", "New Name"])
+
+        assert result.exit_code == 0
+        mock_rega_context.resolve_channel_addresses.assert_called_once_with("ABC123:1")
+        mock_rega_context.rename_channel.assert_called_once_with(5678, "New Name")
+
+    def test_rejects_ambiguous_device_address(self, runner, mock_rega_context):
+        """Should require an exact channel address when a device has many channels."""
+        from ccu_cli.rega import RoomDevice
+
+        mock_rega_context.resolve_channel_addresses.return_value = [
+            RoomDevice(id=111, name="Ch 1", address="ABC123:1"),
+            RoomDevice(id=222, name="Ch 2", address="ABC123:2"),
+        ]
+
+        result = runner.invoke(main, ["channel", "rename", "ABC123", "New Name"])
+
+        assert result.exit_code != 0
+        assert "resolves to multiple channels" in result.output
+        mock_rega_context.rename_channel.assert_not_called()
 
 
 class TestDeviceConfigCommand:

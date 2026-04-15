@@ -5,6 +5,7 @@ Uses ReGa client for operations not available in aiohomematic (e.g., delete_prog
 """
 
 import asyncio
+import json
 import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -77,6 +78,16 @@ class Program:
     last_execute_time: str | None
 
 
+@dataclass
+class HeatingGroupMember:
+    """A member device of a heating group."""
+
+    address: str
+    member_type: str
+    name: str
+    model: str
+
+
 class CCUBackend:
     """Synchronous wrapper around aiohomematic for CLI use.
 
@@ -84,8 +95,9 @@ class CCUBackend:
     aiohomematic API in a dedicated event loop.
     """
 
-    def __init__(self, config: CCUConfig):
+    def __init__(self, config: CCUConfig, include_virtual_devices: bool = False):
         self.config = config
+        self.include_virtual_devices = include_virtual_devices
         self._central: CentralUnit | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -98,6 +110,7 @@ class CCUBackend:
             password=self.config.password or "",
             tls=self.config.https,
             verify_tls=False,  # Allow self-signed certs
+            enable_virtual_devices=self.include_virtual_devices,
         )
 
     def _run_async(self, coro: Any) -> Any:
@@ -212,6 +225,223 @@ class CCUBackend:
                 )
             )
         return channels
+
+    def list_groups(self) -> list[Device]:
+        """List heating groups from the VirtualDevices interface."""
+        group_definitions = self._safe_get_heating_group_definitions()
+        groups = {
+            device.address: self._apply_group_display_name(
+                device=device,
+                group_definitions=group_definitions,
+            )
+            for device in self.list_devices()
+            if device.interface == Interface.VIRTUAL_DEVICES.value
+        }
+
+        for raw_device in self._list_group_devices_raw():
+            address = str(raw_device.get("ADDRESS", ""))
+            if not address or ":" in address or address in groups:
+                continue
+            groups[address] = self._build_group_from_xmlrpc(
+                address=address,
+                raw_device=raw_device,
+                group_definitions=group_definitions,
+            )
+
+        return sorted(
+            groups.values(),
+            key=lambda device: (device.name.lower(), device.address),
+        )
+
+    def get_group(self, address: str) -> Device | None:
+        """Get a heating group by address."""
+        device = self.get_device(address)
+        group_definitions = self._safe_get_heating_group_definitions()
+        if device is not None and device.interface == Interface.VIRTUAL_DEVICES.value:
+            return self._apply_group_display_name(
+                device=device,
+                group_definitions=group_definitions,
+            )
+
+        for raw_device in self._list_group_devices_raw():
+            if raw_device.get("ADDRESS") != address:
+                continue
+            return self._build_group_from_xmlrpc(
+                address=address,
+                raw_device=raw_device,
+                group_definitions=group_definitions,
+            )
+        return None
+
+    def get_group_channels(self, address: str) -> list[Channel]:
+        """Get channels for a heating group."""
+        channels = self.get_device_channels(address)
+        if channels:
+            return channels
+        if self.get_group(address) is None:
+            return []
+
+        description = self._get_group_device_description(address)
+        if not description:
+            return []
+
+        channels = [
+            Channel(
+                address=address,
+                name=address,
+                channel_no=address,
+                channel_type=str(description.get("TYPE", "")),
+            )
+        ]
+        for child_address in description.get("CHILDREN", []):
+            child_description = self._get_group_device_description(child_address)
+            channels.append(
+                Channel(
+                    address=child_address,
+                    name=child_address.split(":", 1)[-1],
+                    channel_no=child_description.get(
+                        "INDEX",
+                        child_address.split(":", 1)[-1],
+                    ),
+                    channel_type=str(child_description.get("TYPE", "")),
+                )
+            )
+        return channels
+
+    def get_group_members(self, address: str) -> list[HeatingGroupMember]:
+        """Get member devices for a heating group."""
+        definition = self._safe_get_heating_group_definitions().get(address)
+        if definition is None:
+            return []
+
+        members = []
+        for member in definition.get("groupMembers", []):
+            member_address = str(member.get("id", ""))
+            member_type = str(member.get("memberType", {}).get("id", ""))
+            device_address = member_address.split(":", 1)[0]
+            device = self.central.device_registry.get_device(address=device_address)
+            members.append(
+                HeatingGroupMember(
+                    address=member_address,
+                    member_type=member_type,
+                    name=(device.name or member_address) if device is not None else member_address,
+                    model=(device.model or "") if device is not None else "",
+                )
+            )
+        return members
+
+    def _safe_get_heating_group_definitions(self) -> dict[str, dict[str, Any]]:
+        """Return heating-group definitions from CCU JSON-RPC."""
+        try:
+            response = self._run_async(
+                self.central.json_rpc_client._post(method="CCU.getHeatingGroupList")
+            )
+            raw_result = response.get("result", {})
+            payload = json.loads(raw_result) if isinstance(raw_result, str) else raw_result
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Failed to load heating group definitions",
+                exc_info=True,
+            )
+            return {}
+
+        definitions = {}
+        for group in payload.get("groups", []):
+            try:
+                group_id = int(group["id"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            definitions[f"INT{group_id:07d}"] = group
+        return definitions
+
+    def _list_group_devices_raw(self) -> list[dict[str, Any]]:
+        """Return raw VirtualDevices entries from the XML-RPC groups interface."""
+        try:
+            with XMLRPCClient(self.config, interface="VirtualDevices") as client:
+                return client.list_devices()
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Failed to list raw virtual devices",
+                exc_info=True,
+            )
+            return []
+
+    def _get_group_device_description(self, address: str) -> dict[str, Any]:
+        """Return the raw XML-RPC device description for a virtual group object."""
+        try:
+            with XMLRPCClient(self.config, interface="VirtualDevices") as client:
+                return client.get_device_description(address)
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Failed to get raw virtual device description",
+                exc_info=True,
+            )
+            return {}
+
+    def _build_group_from_xmlrpc(
+        self,
+        *,
+        address: str,
+        raw_device: dict[str, Any],
+        group_definitions: dict[str, dict[str, Any]],
+    ) -> Device:
+        """Build a group device from raw `/groups` XML-RPC data."""
+        display_name = self._get_group_display_name(
+            address=address,
+            raw_name=address,
+            group_definitions=group_definitions,
+        )
+        return Device(
+            address=address,
+            name=display_name,
+            model=str(raw_device.get("TYPE", "")),
+            interface=Interface.VIRTUAL_DEVICES.value,
+            firmware=str(raw_device.get("FIRMWARE", "")),
+            available=True,
+        )
+
+    def _apply_group_display_name(
+        self,
+        *,
+        device: Device,
+        group_definitions: dict[str, dict[str, Any]],
+    ) -> Device:
+        """Apply the configured heating-group name when available."""
+        display_name = self._get_group_display_name(
+            address=device.address,
+            raw_name=device.name,
+            group_definitions=group_definitions,
+        )
+        if display_name == device.name:
+            return device
+
+        return Device(
+            address=device.address,
+            name=display_name,
+            model=device.model,
+            interface=device.interface,
+            firmware=device.firmware,
+            available=device.available,
+        )
+
+    def _get_group_display_name(
+        self,
+        *,
+        address: str,
+        raw_name: str,
+        group_definitions: dict[str, dict[str, Any]],
+    ) -> str:
+        """Return the configured group name when available."""
+        definition = group_definitions.get(address)
+        if definition is None:
+            return raw_name
+
+        properties = definition.get("groupProperties", {})
+        return (
+            str(properties.get("GROUP_DEVICE_NAME", "")).strip()
+            or str(properties.get("NAME", "")).strip()
+            or raw_name
+        )
 
     def rename_device(
         self, address: str, new_name: str, include_channels: bool = False
