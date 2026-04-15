@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] - 2026-04-15
+
+### Added
+- `room resolve-address` and address-based room assignment helpers
+- Heating group inspection with member device output (`ccu group list/get`)
+
+### Fixed
+- Link create/delete via XML-RPC for reliable direct-link management
+- Compatibility with newer `aiohomematic` async central startup
+- Cleaner shutdown without noisy `aiohomematic` warnings
+
+### Changed
+- Added `git-cliff` release workflow and global `uv tool install` documentation
+- Added MIT license metadata for PyPI distribution
+
 ## [0.2.0] - 2026-02-05
 
 ### Added
