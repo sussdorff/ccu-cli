@@ -111,6 +111,10 @@ CCU_USERNAME=admin
 CCU_PASSWORD=secret
 ```
 
+## License
+
+MIT. See [`LICENSE`](./LICENSE).
+
 ## Usage
 
 The CLI follows a kubectl-style `resource action` pattern.
