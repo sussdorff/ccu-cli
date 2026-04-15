@@ -4,16 +4,72 @@ CLI tool for interacting with RaspberryMatic/CCU3 via [aiohomematic](https://git
 
 ## Installation
 
+### Local Development
+
 ```bash
 # Clone repository
-git clone https://github.com/<user>/ccu-cli.git
+git clone https://github.com/sussdorff/ccu-cli.git
 cd ccu-cli
 
-# Install with uv
+# Install project dependencies
 uv sync
 
-# Or install globally
-uv tool install .
+# Run from the checkout
+uv run ccu --help
+```
+
+### Global Tool Installation
+
+Install `ccu` once and call it from any directory:
+
+```bash
+cd /path/to/ccu-cli
+
+# Install as an editable global uv tool
+uv tool install --editable .
+
+# Show the directory that must be on your PATH
+uv tool dir --bin
+```
+
+If `ccu` is not found yet, add the tool bin directory to your shell config:
+
+```bash
+export PATH="$(uv tool dir --bin):$PATH"
+```
+
+Update an editable install after metadata changes:
+
+```bash
+uv tool install --editable . --force
+```
+
+Once the package is published, installation becomes:
+
+```bash
+uv tool install ccu-cli
+```
+
+### Release Workflow
+
+`git-cliff` is configured via [`cliff.toml`](./cliff.toml) and accepts both the
+existing SemVer tags and future CalVer tags like `v2026.4.15`.
+
+For a CalVer PyPI release, use a matching PEP 440 package version in
+[`pyproject.toml`](./pyproject.toml), for example `2026.4.15`, then:
+
+```bash
+# Refresh the unreleased changelog section
+uv run git-cliff --unreleased --prepend CHANGELOG.md
+
+# Build sdist + wheel
+uv build
+
+# Optional: dry-run the upload first
+uv publish --dry-run
+
+# Publish to PyPI
+uv publish --token "$UV_PUBLISH_TOKEN"
 ```
 
 ## Configuration
