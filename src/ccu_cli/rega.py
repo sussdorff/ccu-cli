@@ -94,11 +94,11 @@ class ReGaClient:
         """
         response = self.client.post(
             "/rega.exe",
-            content=script,
+            content=script.encode("latin-1"),
             headers={"Content-Type": "text/plain"},
         )
         response.raise_for_status()
-        return response.text
+        return response.content.decode("latin-1")
 
     def get_room(self, room_id: int) -> dict[str, Any]:
         """Get room details including description.

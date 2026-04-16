@@ -82,6 +82,19 @@ class TestExecute:
 
         assert "Hello World" in result
 
+    def test_uses_latin1_for_request_and_response_text(self, mock_rega_client):
+        """Should round-trip umlauts using the encoding expected by ReGa."""
+
+        def handler(request):
+            body = request.read()
+            assert b'WriteLine("B\xfcro");' in body
+            return Response(200, content="Büro".encode("latin-1"))
+
+        client = mock_rega_client(handler)
+        result = client.execute('WriteLine("Büro");')
+
+        assert result == "Büro"
+
 
 class TestCreateRoom:
     """Tests for ReGaClient.create_room()."""
@@ -120,6 +133,19 @@ class TestCreateRoom:
 
         with pytest.raises(ReGaError, match="Failed to create room"):
             client.create_room("Test Room")
+
+    def test_encodes_umlauts_correctly(self, mock_rega_client):
+        """Should send room names with umlauts in the encoding ReGa expects."""
+
+        def handler(request):
+            body = request.read().decode("latin-1")
+            assert 'room.Name("Büro EG")' in body
+            return Response(200, text="10454")
+
+        client = mock_rega_client(handler)
+        room_id = client.create_room("Büro EG")
+
+        assert room_id == 10454
 
 
 class TestRenameRoom:
