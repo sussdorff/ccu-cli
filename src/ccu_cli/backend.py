@@ -44,7 +44,7 @@ class Channel:
     address: str
     name: str
     channel_no: int
-    channel_type: str
+    channel_type: str = ""
 
 
 @dataclass

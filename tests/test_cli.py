@@ -358,9 +358,11 @@ class TestRoomGetCommand:
 
     def test_displays_room_details(self, runner, mock_rega_context):
         """Should display room details."""
-        mock_rega_context.list_rooms.return_value = [
-            {"id": 1234, "name": "Living Room"},
-        ]
+        mock_rega_context.get_room.return_value = {
+            "id": 1234,
+            "name": "Living Room",
+            "description": "Living Room",
+        }
         mock_rega_context.list_room_devices.return_value = []
 
         result = runner.invoke(main, ["room", "get", "1234"])
@@ -370,7 +372,9 @@ class TestRoomGetCommand:
 
     def test_handles_room_not_found(self, runner, mock_rega_context):
         """Should show error if room not found."""
-        mock_rega_context.list_rooms.return_value = []
+        from ccu_cli.rega import ReGaError
+
+        mock_rega_context.get_room.side_effect = ReGaError("Room not found")
 
         result = runner.invoke(main, ["room", "get", "9999"])
 
@@ -806,7 +810,7 @@ class TestLinkCreateCommand:
         assert "OK" in result.output
         assert "Created link" in result.output
         mock_backend_context.create_link.assert_called_once_with(
-            "000B5D89B014D8:1", "0013A40997105E:4", "", ""
+            "000B5D89B014D8:1", "0013A40997105E:4", "", "", "BidCos-RF"
         )
 
     def test_creates_link_with_name(self, runner, mock_backend_context):
@@ -827,7 +831,11 @@ class TestLinkCreateCommand:
 
         assert result.exit_code == 0
         mock_backend_context.create_link.assert_called_once_with(
-            "000B5D89B014D8:1", "0013A40997105E:4", "Test Link", "Test Desc"
+            "000B5D89B014D8:1",
+            "0013A40997105E:4",
+            "Test Link",
+            "Test Desc",
+            "BidCos-RF",
         )
 
 
@@ -845,7 +853,7 @@ class TestLinkDeleteCommand:
         assert result.exit_code == 0
         assert "OK" in result.output
         mock_backend_context.delete_link.assert_called_once_with(
-            "000B5D89B014D8:1", "0013A40997105E:4"
+            "000B5D89B014D8:1", "0013A40997105E:4", "BidCos-RF"
         )
 
     def test_cancels_without_confirmation(self, runner, mock_backend_context):

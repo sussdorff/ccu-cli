@@ -42,11 +42,11 @@ class TestReGaClientInit:
         client = ReGaClient(rega_config)
         assert client.base_url.startswith("http://")
 
-    def test_uses_https_when_configured(self):
-        """Should use HTTPS when configured."""
+    def test_still_uses_http_when_https_is_configured(self):
+        """ReGa remains on HTTP port 8181 even if the main CCU uses HTTPS."""
         config = CCUConfig(host="test-ccu", https=True)
         client = ReGaClient(config)
-        assert client.base_url.startswith("https://")
+        assert client.base_url.startswith("http://")
 
 
 class TestExecute:

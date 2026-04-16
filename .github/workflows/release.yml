@@ -10,7 +10,21 @@ permissions:
   id-token: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run test suite
+        run: uv run pytest -q
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: pypi

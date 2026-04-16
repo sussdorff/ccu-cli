@@ -100,6 +100,41 @@ def main() -> None:
     pass
 
 
+@main.command("devices", hidden=True)
+@click.pass_context
+def legacy_devices(ctx: click.Context) -> None:
+    """Deprecated alias for ``ccu device list``."""
+    console.print("[yellow]Deprecated:[/yellow] Use 'ccu device list' instead.")
+    ctx.invoke(device_list)
+
+
+@main.command("sysvars", hidden=True)
+@click.pass_context
+def legacy_sysvars(ctx: click.Context) -> None:
+    """Deprecated alias for ``ccu sysvar list``."""
+    console.print("[yellow]Deprecated:[/yellow] Use 'ccu sysvar list' instead.")
+    ctx.invoke(sysvar_list)
+
+
+@main.command("get", hidden=True)
+@click.argument("path")
+@click.pass_context
+def legacy_get(ctx: click.Context, path: str) -> None:
+    """Deprecated alias for ``ccu datapoint get``."""
+    console.print("[yellow]Deprecated:[/yellow] Use 'ccu datapoint get' instead.")
+    ctx.invoke(datapoint_get, path=path)
+
+
+@main.command("set", hidden=True)
+@click.argument("path")
+@click.argument("value")
+@click.pass_context
+def legacy_set(ctx: click.Context, path: str, value: str) -> None:
+    """Deprecated alias for ``ccu datapoint set``."""
+    console.print("[yellow]Deprecated:[/yellow] Use 'ccu datapoint set' instead.")
+    ctx.invoke(datapoint_set, path=path, value=value)
+
+
 @main.command()
 def info() -> None:
     """Show CCU server information."""
@@ -922,6 +957,22 @@ def room_list() -> None:
                 table.add_row(str(rm["id"]), rm["name"])
 
             console.print(table)
+        except ReGaError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
+@room.command("create")
+@click.argument("name")
+def room_create(name: str) -> None:
+    """Create a new room."""
+    with get_rega_client() as client:
+        try:
+            room_id = client.create_room(name)
+            console.print(f"[green]OK[/green] Created room '{name}' (ID: {room_id})")
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

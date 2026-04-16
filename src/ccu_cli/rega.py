@@ -135,6 +135,43 @@ if (room) {{
             }
         raise ReGaError(f"Unexpected response: {result}")
 
+    def create_room(self, name: str) -> int:
+        """Create a new room and return its ReGa object id.
+
+        Args:
+            name: Room name
+
+        Returns:
+            The created room id
+
+        Raises:
+            ReGaError: If room creation fails or the returned id is invalid
+        """
+        script = f"""
+object rooms = dom.GetObject(ID_ROOMS);
+if (rooms) {{
+    object room = dom.CreateObject(OT_ENUM);
+    if (room) {{
+        room.Name("{name}");
+        rooms.Add(room.ID());
+        WriteLine(room.ID());
+    }} else {{
+        WriteLine("ERROR:Failed to create room");
+    }}
+}} else {{
+    WriteLine("ERROR:Rooms container not found");
+}}
+"""
+        result = self.execute(script)
+        first_line = result.strip().split("\n")[0].strip() if result.strip() else ""
+        try:
+            return int(first_line)
+        except ValueError as exc:
+            message = first_line[6:].strip() if first_line.startswith("ERROR:") else first_line
+            if not message:
+                message = "Unknown error"
+            raise ReGaError(f"Failed to create room: {message}") from exc
+
     def set_room_description(self, room_id: int, description: str) -> None:
         """Set room description.
 
