@@ -55,8 +55,17 @@ uv tool install ccu-cli
 `git-cliff` is configured via [`cliff.toml`](./cliff.toml) and accepts both the
 existing SemVer tags and future CalVer tags like `v2026.4.15`.
 
-For a CalVer PyPI release, use a matching PEP 440 package version in
-[`pyproject.toml`](./pyproject.toml), for example `2026.4.15`, then:
+PyPI publishing is configured via GitHub Trusted Publishing. Create the pending
+publisher in PyPI with:
+
+- Project name: `ccu-cli`
+- Owner: `sussdorff`
+- Repository name: `ccu-cli`
+- Workflow name: `release.yml`
+- Environment name: `pypi`
+
+For a release, set the package version in [`pyproject.toml`](./pyproject.toml),
+refresh the changelog, commit the release, and push a version tag:
 
 ```bash
 # Refresh the unreleased changelog section
@@ -65,11 +74,16 @@ uv run git-cliff --unreleased --prepend CHANGELOG.md
 # Build sdist + wheel
 uv build
 
-# Optional: dry-run the upload first
-uv publish --dry-run
+# Optional: validate the built artifacts locally
+uv publish --dry-run dist/*
 
-# Publish to PyPI
-uv publish --token "$UV_PUBLISH_TOKEN"
+# Commit the release metadata
+git add CHANGELOG.md pyproject.toml uv.lock
+git commit -m "chore(release): prepare v0.3.0"
+
+# Push the release tag to trigger GitHub Trusted Publishing
+git tag v0.3.0
+git push origin main --follow-tags
 ```
 
 ## Configuration
