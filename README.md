@@ -79,10 +79,10 @@ uv publish --dry-run dist/*
 
 # Commit the release metadata
 git add CHANGELOG.md pyproject.toml uv.lock
-git commit -m "chore(release): prepare v0.3.0"
+git commit -m "chore(release): prepare v0.3.1"
 
 # Push the release tag to trigger GitHub Trusted Publishing
-git tag v0.3.0
+git tag v0.3.1
 git push origin main --follow-tags
 ```
 

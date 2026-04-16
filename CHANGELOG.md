@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2026-04-16
+
+### Fixed
+- ReGa room rename/create now round-trips umlauts correctly by using latin-1 for script requests and responses
+
 ## [0.3.0] - 2026-04-15
 
 ### Added

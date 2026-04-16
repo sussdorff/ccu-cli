@@ -1,6 +1,6 @@
 [project]
 name = "ccu-cli"
-version = "0.3.0"
+version = "0.3.1"
 description = "CLI tool for interacting with RaspberryMatic/CCU3"
 authors = [
     { name = "Malte Sussdorff" },
