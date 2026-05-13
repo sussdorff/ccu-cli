@@ -721,6 +721,49 @@ class TestGroupDeleteCommand:
         mock_group_xmlrpc_context.delete_device.assert_not_called()
 
 
+class TestGroupCreateCommand:
+    """Tests for 'ccu group create' command."""
+
+    def test_creates_group_with_channels(self, runner, mock_backend_context):
+        """Should create a heating group and display the new address."""
+        mock_backend_context.create_group.return_value = "INT0000005"
+
+        result = runner.invoke(
+            main,
+            ["group", "create", "My Group", "--channel", "ABC123:1", "--channel", "DEF456:1"],
+        )
+
+        assert result.exit_code == 0
+        assert "INT0000005" in result.output
+        mock_backend_context.create_group.assert_called_once_with(
+            "My Group", ["ABC123:1", "DEF456:1"]
+        )
+
+    def test_creates_group_without_channels(self, runner, mock_backend_context):
+        """Should create a heating group with no members when no channels given."""
+        mock_backend_context.create_group.return_value = "INT0000006"
+
+        result = runner.invoke(main, ["group", "create", "Empty Group"])
+
+        assert result.exit_code == 0
+        assert "INT0000006" in result.output
+        mock_backend_context.create_group.assert_called_once_with("Empty Group", [])
+
+    def test_handles_backend_error(self, runner, mock_backend_context):
+        """Should display error when backend raises BackendError."""
+        from ccu_cli.backend import BackendError
+
+        mock_backend_context.create_group.side_effect = BackendError("creation failed")
+
+        result = runner.invoke(
+            main,
+            ["group", "create", "Bad Group", "--channel", "XYZ:1"],
+        )
+
+        assert result.exit_code != 0
+        assert "creation failed" in result.output
+
+
 class TestLinkListCommand:
     """Tests for 'ccu link list' command."""
 
