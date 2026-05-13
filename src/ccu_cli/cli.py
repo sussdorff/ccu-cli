@@ -1304,6 +1304,35 @@ def group_get(address: str) -> None:
             sys.exit(1)
 
 
+@group.command("create")
+@click.argument("name")
+@click.option(
+    "--channel",
+    "-c",
+    "channels",
+    multiple=True,
+    help="Thermostat channel address to include (e.g. ABC123:1). Repeat for multiple.",
+)
+def group_create(name: str, channels: tuple[str, ...]) -> None:
+    """Create a new heating group.
+
+    NAME: Display name for the new group.
+
+    Creation uses the CCU WebUI JSON-RPC API (CCU.addHeatingGroup).
+    The /groups XML-RPC endpoint and ReGa scripting do not support creation.
+    """
+    with get_backend(enable_virtual_devices=True) as backend:
+        try:
+            address = backend.create_group(name, list(channels))
+            console.print(f"[green]OK[/green] Created heating group {address!r} ({name!r})")
+        except BackendError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+
+
 @group.command("delete")
 @click.argument("address")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")

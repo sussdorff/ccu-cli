@@ -226,6 +226,50 @@ class CCUBackend:
             )
         return channels
 
+    def create_group(self, name: str, channels: list[str]) -> str:
+        """Create a new heating group via WebUI JSON-RPC.
+
+        Uses the ``CCU.addHeatingGroup`` method, which is the only known
+        CCU API path that supports heating-group creation.  The ``/groups``
+        XML-RPC endpoint and ReGa scripting do not expose a create operation.
+
+        Args:
+            name: Display name for the new heating group.
+            channels: Thermostat channel addresses to add as members
+                (e.g. ``["ABC123:1", "DEF456:1"]``).
+
+        Returns:
+            The address of the newly created group (e.g. ``"INT0000005"``).
+
+        Raises:
+            BackendError: If the CCU rejects the request or returns an
+                unexpected response.
+        """
+        try:
+            response = self._run_async(
+                self.central.json_rpc_client._post(
+                    method="CCU.addHeatingGroup",
+                    extra_params={"groupName": name, "channels": channels},
+                )
+            )
+        except Exception as exc:
+            raise BackendError(f"Failed to create heating group: {exc}") from exc
+
+        result = response.get("result") or response.get("id")
+        if not result:
+            raise BackendError(
+                f"CCU.addHeatingGroup returned no group ID: {response}"
+            )
+
+        try:
+            group_id = int(result)
+        except (TypeError, ValueError) as exc:
+            raise BackendError(
+                f"CCU.addHeatingGroup returned unexpected result: {result!r}"
+            ) from exc
+
+        return f"INT{group_id:07d}"
+
     def list_groups(self) -> list[Device]:
         """List heating groups from the VirtualDevices interface."""
         group_definitions = self._safe_get_heating_group_definitions()
