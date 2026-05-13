@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-13
+
 ### Added
 - `ccu group create` command — create a new heating group by name and optional thermostat channel addresses via `CCU.addHeatingGroup` JSON-RPC (the only CCU API path that supports group creation; `/groups` XML-RPC and ReGa scripting do not expose a create operation)
 
