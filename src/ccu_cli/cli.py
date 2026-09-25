@@ -15,10 +15,8 @@ from .rega import ReGaClient, ReGaError
 from .schedule import (
     WEEKDAYS,
     WEEKDAY_SHORT,
-    WeekSchedule,
     create_constant_schedule,
     create_simple_schedule,
-    format_time,
     parse_schedule_from_paramset,
     build_schedule_params,
     parse_time,

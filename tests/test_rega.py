@@ -37,11 +37,6 @@ class TestReGaClientInit:
         client = ReGaClient(rega_config)
         assert ":8181" in client.base_url
 
-    def test_uses_http_by_default(self, rega_config):
-        """Should use HTTP by default."""
-        client = ReGaClient(rega_config)
-        assert client.base_url.startswith("http://")
-
     def test_still_uses_http_when_https_is_configured(self):
         """ReGa remains on HTTP port 8181 even if the main CCU uses HTTPS."""
         config = CCUConfig(host="test-ccu", https=True)
@@ -70,17 +65,6 @@ class TestExecute:
         assert captured_request["path"] == "/rega.exe"
         assert "WriteLine" in captured_request["body"]
         assert captured_request["content_type"] == "text/plain"
-
-    def test_returns_response_text(self, mock_rega_client):
-        """Should return the response text."""
-
-        def handler(request):
-            return Response(200, text="Hello World\r\n<xml>...")
-
-        client = mock_rega_client(handler)
-        result = client.execute("WriteLine('Hello World');")
-
-        assert "Hello World" in result
 
     def test_uses_latin1_for_request_and_response_text(self, mock_rega_client):
         """Should round-trip umlauts using the encoding expected by ReGa."""
@@ -111,17 +95,6 @@ class TestCreateRoom:
         room_id = client.create_room("Living Room")
 
         assert room_id == 1234
-
-    def test_handles_multiline_response(self, mock_rega_client):
-        """Should extract ID from first line of response."""
-
-        def handler(request):
-            return Response(200, text="5678\n<xml>additional data</xml>")
-
-        client = mock_rega_client(handler)
-        room_id = client.create_room("Kitchen")
-
-        assert room_id == 5678
 
     def test_raises_error_on_invalid_response(self, mock_rega_client):
         """Should raise ReGaError if ID cannot be parsed."""

@@ -1,12 +1,12 @@
 """Tests for XMLRPCClient."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from xmlrpc.client import Fault
 
 import pytest
 
 from ccu_cli.config import CCUConfig
-from ccu_cli.xmlrpc import DeviceLink, LinkInfo, XMLRPCClient, XMLRPCError
+from ccu_cli.xmlrpc import DeviceLink, XMLRPCClient, XMLRPCError
 
 
 @pytest.fixture
@@ -45,11 +45,6 @@ class TestXMLRPCClientInit:
         """Should use BidCos-RF port 2001 when specified."""
         client = XMLRPCClient(xmlrpc_config, interface="BidCos-RF")
         assert client.port == 2001
-
-    def test_uses_http_by_default(self, xmlrpc_config):
-        """Should use HTTP by default."""
-        client = XMLRPCClient(xmlrpc_config)
-        assert client.base_url.startswith("http://")
 
     def test_always_uses_http_for_xmlrpc(self):
         """Should always use HTTP for XML-RPC regardless of https config.

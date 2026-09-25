@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 from ccu_cli.cli import main
 from ccu_cli.backend import (
     Channel,
-    DataPoint,
     Device,
     HeatingGroupMember,
     Program as BackendProgram,

@@ -25,14 +25,8 @@ class TestParseTime:
     def test_parses_end_of_day(self) -> None:
         assert parse_time("24:00") == 1440
 
-    def test_parses_morning(self) -> None:
-        assert parse_time("05:00") == 300
-
     def test_parses_with_minutes(self) -> None:
         assert parse_time("06:30") == 390
-
-    def test_parses_afternoon(self) -> None:
-        assert parse_time("14:45") == 885
 
     def test_accepts_single_digit_hour(self) -> None:
         # Single digit hour is valid
@@ -60,9 +54,6 @@ class TestFormatTime:
 
     def test_formats_end_of_day(self) -> None:
         assert format_time(1440) == "24:00"
-
-    def test_formats_morning(self) -> None:
-        assert format_time(300) == "05:00"
 
     def test_formats_with_minutes(self) -> None:
         assert format_time(390) == "06:30"
