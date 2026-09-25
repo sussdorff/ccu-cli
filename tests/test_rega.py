@@ -1,7 +1,7 @@
 """Tests for ReGaClient."""
 
-import pytest
 import httpx
+import pytest
 from httpx import MockTransport, Response
 
 from ccu_cli.config import CCUConfig

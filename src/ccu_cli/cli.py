@@ -9,16 +9,16 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from .backend import CCUBackend, BackendError
+from .backend import BackendError, CCUBackend
 from .config import CCUConfig, ConfigurationError, load_config
 from .rega import ReGaClient, ReGaError
 from .schedule import (
-    WEEKDAYS,
     WEEKDAY_SHORT,
+    WEEKDAYS,
+    build_schedule_params,
     create_constant_schedule,
     create_simple_schedule,
     parse_schedule_from_paramset,
-    build_schedule_params,
     parse_time,
 )
 from .xmlrpc import XMLRPCClient, XMLRPCError
@@ -86,16 +86,15 @@ def _format_timestamp(ts: int | str | None) -> str:
         return ts if ts else "Never"
     if ts == 0:
         return "Never"
-    from datetime import datetime
+    from datetime import UTC, datetime
 
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(ts, tz=UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @click.group()
 @click.version_option()
 def main() -> None:
     """CLI tool for interacting with RaspberryMatic/CCU3."""
-    pass
 
 
 @main.command("devices", hidden=True)
@@ -152,7 +151,7 @@ def info() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -165,7 +164,6 @@ def info() -> None:
 @main.group()
 def device() -> None:
     """Manage CCU devices."""
-    pass
 
 
 @device.command("list")
@@ -189,7 +187,7 @@ def device_list() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -240,7 +238,7 @@ def device_get(address: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -272,7 +270,7 @@ def device_rename(address: str, new_name: str, include_channels: bool) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -292,7 +290,7 @@ def device_config(channel_address: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -307,7 +305,7 @@ def device_refresh() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -320,7 +318,6 @@ def device_refresh() -> None:
 @device.group("pair")
 def device_pair() -> None:
     """Manage device pairing (install mode)."""
-    pass
 
 
 @device_pair.command("on")
@@ -377,7 +374,7 @@ def device_pair_on(time: int, interface: str, device: str | None) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -409,7 +406,7 @@ def device_pair_off(interface: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -441,7 +438,7 @@ def device_pair_status() -> None:
                         status = "Inactive"
                         time_str = "-"
                     table.add_row(name, status, time_str)
-                except Exception:
+                except Exception:  # noqa: BLE001 - keep per-interface status independent
                     table.add_row(name, "[dim]N/A[/dim]", "-")
 
             console.print(table)
@@ -449,7 +446,7 @@ def device_pair_status() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -462,7 +459,6 @@ def device_pair_status() -> None:
 @device.group("inbox")
 def device_inbox() -> None:
     """Manage device inbox (newly paired devices)."""
-    pass
 
 
 @device_inbox.command("list")
@@ -490,7 +486,7 @@ def device_inbox_list() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -515,7 +511,7 @@ def device_inbox_accept(address: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -557,7 +553,7 @@ def device_inbox_accept_all(yes: bool) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -570,7 +566,6 @@ def device_inbox_accept_all(yes: bool) -> None:
 @main.group()
 def datapoint() -> None:
     """Read and write datapoint values."""
-    pass
 
 
 @datapoint.command("get")
@@ -600,7 +595,7 @@ def datapoint_get(path: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -648,7 +643,7 @@ def datapoint_set(path: str, value: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -661,7 +656,6 @@ def datapoint_set(path: str, value: str) -> None:
 @main.group()
 def sysvar() -> None:
     """Manage system variables."""
-    pass
 
 
 @sysvar.command("list")
@@ -689,7 +683,7 @@ def sysvar_list() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -702,7 +696,6 @@ def sysvar_list() -> None:
 @main.group()
 def program() -> None:
     """Manage CCU programs."""
-    pass
 
 
 @program.command("list")
@@ -734,7 +727,7 @@ def program_list() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -767,7 +760,7 @@ def program_get(id_or_name: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -791,7 +784,7 @@ def program_run(id_or_name: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -812,19 +805,18 @@ def program_delete(id_or_name: str, yes: bool) -> None:
                 error_console.print(f"[red]Error:[/red] Program not found: {id_or_name}")
                 sys.exit(1)
 
-            if not yes:
-                if not click.confirm(
-                    f"Are you sure you want to delete program '{prg.name}' (ID: {prg.pid})?"
-                ):
-                    console.print("Cancelled")
-                    return
+            if not yes and not click.confirm(
+                f"Are you sure you want to delete program '{prg.name}' (ID: {prg.pid})?"
+            ):
+                console.print("Cancelled")
+                return
 
             deleted_name = backend.delete_program(id_or_name)
             console.print(f"[green]OK[/green] Deleted program '{deleted_name}'")
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -848,7 +840,7 @@ def program_enable(id_or_name: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -872,7 +864,7 @@ def program_disable(id_or_name: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -885,7 +877,6 @@ def program_disable(id_or_name: str) -> None:
 @main.group()
 def channel() -> None:
     """Manage CCU channels."""
-    pass
 
 
 def _resolve_channel_refs(client: ReGaClient, channel_ref: str) -> list[Any]:
@@ -924,7 +915,7 @@ def channel_rename(channel_ref: str, new_name: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -937,7 +928,6 @@ def channel_rename(channel_ref: str, new_name: str) -> None:
 @main.group()
 def room() -> None:
     """Manage CCU rooms."""
-    pass
 
 
 @room.command("list")
@@ -958,7 +948,7 @@ def room_list() -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -974,7 +964,7 @@ def room_create(name: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1015,7 +1005,7 @@ def room_get(room_id: int) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1036,7 +1026,7 @@ def room_describe(room_id: int, description: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1053,7 +1043,7 @@ def room_rename(room_id: int, new_name: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1063,10 +1053,9 @@ def room_rename(room_id: int, new_name: str) -> None:
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
 def room_delete(room_id: int, yes: bool) -> None:
     """Delete a room."""
-    if not yes:
-        if not click.confirm(f"Are you sure you want to delete room {room_id}?"):
-            console.print("Cancelled")
-            return
+    if not yes and not click.confirm(f"Are you sure you want to delete room {room_id}?"):
+        console.print("Cancelled")
+        return
 
     with get_rega_client() as client:
         try:
@@ -1075,7 +1064,7 @@ def room_delete(room_id: int, yes: bool) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1100,7 +1089,7 @@ def room_add_device(room_id: int, channel_ref: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1125,7 +1114,7 @@ def room_remove_device(room_id: int, channel_ref: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1157,7 +1146,7 @@ def room_devices(room_id: int) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1189,7 +1178,7 @@ def room_resolve_address(address: str) -> None:
         except ReGaError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1202,7 +1191,6 @@ def room_resolve_address(address: str) -> None:
 @main.group()
 def group() -> None:
     """Manage heating groups."""
-    pass
 
 
 @group.command("list")
@@ -1230,7 +1218,7 @@ def group_list() -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1297,7 +1285,7 @@ def group_get(address: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1326,7 +1314,7 @@ def group_create(name: str, channels: tuple[str, ...]) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1346,16 +1334,15 @@ def group_delete(address: str, yes: bool) -> None:
                 error_console.print(f"[red]Error:[/red] Group not found: {address}")
                 sys.exit(1)
 
-            if not yes:
-                if not click.confirm(
-                    f"Delete heating group '{grp.name}' ({grp.address})?"
-                ):
-                    console.print("Cancelled")
-                    return
+            if not yes and not click.confirm(
+                f"Delete heating group '{grp.name}' ({grp.address})?"
+            ):
+                console.print("Cancelled")
+                return
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1366,7 +1353,7 @@ def group_delete(address: str, yes: bool) -> None:
         except XMLRPCError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1379,7 +1366,6 @@ def group_delete(address: str, yes: bool) -> None:
 @main.group()
 def link() -> None:
     """Manage device links (Direktverknüpfungen)."""
-    pass
 
 
 def _get_channel_name(backend: CCUBackend, address: str) -> str:
@@ -1474,7 +1460,7 @@ def link_list(address: str | None, interface: str, output_json: bool) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1517,7 +1503,7 @@ def link_get(sender: str, receiver: str, interface: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1552,7 +1538,7 @@ def link_create(
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1574,10 +1560,9 @@ def link_delete(sender: str, receiver: str, yes: bool, interface: str | None) ->
     SENDER: Sender channel address
     RECEIVER: Receiver channel address
     """
-    if not yes:
-        if not click.confirm(f"Remove link {sender} -> {receiver}?"):
-            console.print("Cancelled")
-            return
+    if not yes and not click.confirm(f"Remove link {sender} -> {receiver}?"):
+        console.print("Cancelled")
+        return
 
     with get_backend() as backend:
         try:
@@ -1589,7 +1574,7 @@ def link_delete(sender: str, receiver: str, yes: bool, interface: str | None) ->
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1597,7 +1582,6 @@ def link_delete(sender: str, receiver: str, yes: bool, interface: str | None) ->
 @link.group("config")
 def link_config() -> None:
     """Manage link configuration (LINK paramset)."""
-    pass
 
 
 @link_config.command("get")
@@ -1623,7 +1607,7 @@ def link_config_get(sender: str, receiver: str, interface: str) -> None:
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1697,7 +1681,7 @@ def link_config_set(
         except BackendError as e:
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - preserve CLI error and exit contract
             error_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
 
@@ -1742,7 +1726,6 @@ def _get_config() -> CCUConfig:
 @main.group()
 def schedule() -> None:
     """Manage thermostat heating schedules (Wochenprogramme)."""
-    pass
 
 
 @schedule.command("get")

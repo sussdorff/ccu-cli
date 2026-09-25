@@ -4,15 +4,15 @@ import pytest
 
 from ccu_cli.schedule import (
     WEEKDAYS,
-    TimeSlot,
     DaySchedule,
+    TimeSlot,
     WeekSchedule,
-    parse_time,
+    build_schedule_params,
+    create_constant_schedule,
+    create_simple_schedule,
     format_time,
     parse_schedule_from_paramset,
-    build_schedule_params,
-    create_simple_schedule,
-    create_constant_schedule,
+    parse_time,
 )
 
 

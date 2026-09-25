@@ -1,7 +1,7 @@
 """ReGa Script API client for CCU."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 import httpx
 
@@ -11,7 +11,6 @@ from .config import CCUConfig
 class ReGaError(Exception):
     """Error from ReGa script execution."""
 
-    pass
 
 
 @dataclass
@@ -74,10 +73,10 @@ class ReGaClient:
             self._client.close()
             self._client = None
 
-    def __enter__(self) -> "ReGaClient":
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         self.close()
 
     def execute(self, script: str) -> str:

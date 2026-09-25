@@ -7,9 +7,10 @@ Uses ReGa client for operations not available in aiohomematic (e.g., delete_prog
 import asyncio
 import json
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Self
 
 from aiohomematic.central import CentralConfig, CentralUnit
 from aiohomematic.const import Interface, ParamsetKey
@@ -18,11 +19,9 @@ from .config import CCUConfig
 from .xmlrpc import DeviceLink, LinkInfo, XMLRPCClient
 
 
-
 class BackendError(Exception):
     """Error from backend operations."""
 
-    pass
 
 
 @dataclass
@@ -162,11 +161,11 @@ class CCUBackend:
             self._loop.close()
             self._loop = None
 
-    def __enter__(self) -> "CCUBackend":
+    def __enter__(self) -> Self:
         self.start()
         return self
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         self.stop()
 
     @property
