@@ -1,6 +1,5 @@
 """Tests for configuration loading."""
 
-import pytest
 from ccu_cli.config import CCUConfig, load_config
 
 

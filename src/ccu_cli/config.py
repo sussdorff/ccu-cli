@@ -15,7 +15,6 @@ except ImportError:
 class ConfigurationError(Exception):
     """Error in configuration."""
 
-    pass
 
 
 @dataclass

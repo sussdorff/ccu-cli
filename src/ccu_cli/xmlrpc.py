@@ -8,7 +8,7 @@ Ports:
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 from xmlrpc.client import ServerProxy
 
 from aiohomematic.support import build_xml_rpc_headers, build_xml_rpc_uri
@@ -19,7 +19,6 @@ from .config import CCUConfig
 class XMLRPCError(Exception):
     """Error from XML-RPC API call."""
 
-    pass
 
 
 @dataclass
@@ -118,10 +117,10 @@ class XMLRPCClient:
             self._proxy("close")()
             self._proxy = None
 
-    def __enter__(self) -> "XMLRPCClient":
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         self.close()
 
     def get_links(self, address: str | None = None) -> list[DeviceLink]:

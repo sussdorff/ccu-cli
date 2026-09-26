@@ -1,18 +1,18 @@
 """Tests for CLI commands."""
 
-import pytest
-from click.testing import CliRunner
 from unittest.mock import MagicMock
 
-from ccu_cli.cli import main
+import pytest
+from click.testing import CliRunner
+
 from ccu_cli.backend import (
     Channel,
-    DataPoint,
     Device,
     HeatingGroupMember,
-    Program as BackendProgram,
     SysVar,
 )
+from ccu_cli.backend import Program as BackendProgram
+from ccu_cli.cli import main
 
 
 @pytest.fixture

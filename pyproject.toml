@@ -43,7 +43,16 @@ dev = [
     "git-cliff>=2.12.0",
     "pytest>=8.0",
     "pytest-mock>=3.14",
+    "pytest-xdist>=3.8",
+    "ruff>=0.9",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-n auto"
+
+[tool.ruff]
+extend-exclude = [".agents", ".claude"]
 
 [build-system]
 requires = ["hatchling"]
