@@ -19,6 +19,11 @@ def _isolated_environment(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    # load_dotenv() searches upward from the package and writes os.environ
+    # directly, so a .env beyond the worktree would leak into every test.
+    monkeypatch.setattr("ccu_cli.config.load_dotenv", lambda *args, **kwargs: False)
+    for name in ("CCU_HOST", "CCU_HTTPS", "CCU_USERNAME", "CCU_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
