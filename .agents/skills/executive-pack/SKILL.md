@@ -5,6 +5,7 @@ requires_standards: [executive-pack, dispatch/model-routing]
 requires:
   - script:ccore
   - skill:playwright-cli
+  - skill:cognovis-pr
   - skill:session-retro
   - agent:implementer
   - standard:executive-pack
@@ -54,16 +55,19 @@ its own change.
 ## 3. Adversarial review (three models, read-only, in parallel)
 
 Dispatch three read-only reviewer subagents in parallel, one each on `opus` (a fresh
-context, not the implementer's), `sonnet` and `haiku`. All three get the same
-adversarial brief, with no per-model persona:
+context, not the implementer's), `sonnet` and `haiku`. Name the `opus` reviewer the
+**designated repair author** in its brief before dispatching: it reviews read-only like
+the others now, and it is the one actor that may later receive write authority for the
+triaged repair set. All three review the same fixed candidate commit. All three get the
+same adversarial brief, with no per-model persona:
 
 - the stated intent and the acceptance criteria of the work order,
 - the complete diff from the base commit to the candidate,
 - the instruction: find where this change fails its intent - incorrect behaviour,
   missing cases, and claims the change or its tests do not prove. Return each finding
   with an id, a severity (`nit`, `low`, `medium`, `high`, `critical`), the paths, the
-  acceptance criterion it concerns (or that it concerns the change's own behaviour) and
-  a one-sentence summary.
+  acceptance criterion it concerns (or the literal `own-behaviour` when it concerns the
+  change's own behaviour) and a one-sentence summary.
 
 Each reviewer applies the `code-review` skill's review method and checklist itself; it
 does not start that skill's own subagents. Each reviewer works alone and returns one
@@ -76,20 +80,38 @@ The main session merges the three result sets into one deduplicated finding list
 review looks for failures against intent; pr-agent covers the standards and conventions
 lens later. Neither a green CI nor a pr-agent approval counts as the verification verdict.
 
-## 4. Triage (one repair round)
+## 4. Triage (one repair round, by the designated repair author)
 
 Run `scripts/finding_triage.py --findings-file <merged.json> --diff-path <path>...
---ac-ref <AC>...`. Its `repair` set goes back to the same `implementer` subagent in one
-round, all findings at once, ending in one repair commit. Run it again with
-`--review-decisions --repair-rounds-used 1` and one `--repaired <id>` per finding the
-repair commit fixed, to render the deferred and the repaired findings as the "Review
-decisions" section of the pull request body. An unknown repaired id fails the call. A
-second repair round needs a reason the main session states in that section.
+--ac-ref <AC>...`. Its `repair` set goes to the designated `opus` reviewer from step 3,
+in one round, all findings at once, ending in one repair commit.
+
+That hand-off is where its write authority starts, and the accepted repair set is all of
+it. Give it the bounded set, the candidate it reviewed and the worktree; it applies
+every finding in that set, runs the affected checks, commits, and reports the repaired
+finding ids, the new head SHA and the checks it ran. It becomes a coauthor of the
+delivery. The `implementer` and the other two reviewers write nothing while it works —
+one writer at a time, so a finding is never repaired twice or reverted by a concurrent
+edit. A finding whose requirement is ambiguous, or whose fix would exceed the accepted
+set, goes back to the main session instead of being decided in the repair commit.
+
+The repair author cannot verify or approve its own repair, and the main session keeps
+acceptance and the merge decision. If that reviewer's session is gone when triage
+finishes, a replacement takes the role only after reading the pinned candidate and the
+accepted findings; record why the original was unavailable and which route the
+replacement used. There is no silent fall back to the implementer.
+
+Run `finding_triage.py` again with `--review-decisions --repair-rounds-used 1` and one
+`--repaired <id>` per finding the repair commit fixed, to render the deferred and the
+repaired findings as the "Review decisions" section of the pull request body. An unknown
+repaired id fails the call. A second repair round needs a reason the main session states
+in that section.
 
 ## 5. Verification (always, by a non-author agent)
 
-Every delivery is verified by an agent that did not write the change. Only evidence from
-running the changed artifact counts: a command, a request or a UI path, with its
+Every delivery is verified by an agent that authored neither the implementation nor any
+repair — so never the `implementer` and never the designated repair author once it has
+committed. Only evidence from running the changed artifact counts: a command, a request or a UI path, with its
 observed result. Tests passing are not verification.
 
 - When the delivered repository has a skill matching `.agents/skills/verify-*`, the
@@ -102,27 +124,25 @@ observed result. Tests passing are not verification.
 
 The verifier returns one verdict - `PASS`, `PASS+NOTES` or `FAIL` - together with the
 head commit SHA it verified and each run path with its outcome. A new commit on the
-branch invalidates the verdict; verify again. A `FAIL` goes back to the implementer as a
-repair. When the change cannot be run at all, record that reason instead of a verdict;
+branch invalidates the verdict; verify again. A `FAIL`, and any later finding from
+verification or from the pull request, goes back through the main session to the same
+designated repair author, so the delivery keeps one writer after review. When the change cannot be run at all, record that reason instead of a verdict;
 such a delivery is never merged by the main session.
 
-## 6. Pull request (`pr`)
+## 6. Pull request (`cognovis-pr`)
 
-Always open a pull request: write its text with `pr` and publish it with
-`ccore pr ensure --repo <worktree> --summary <text>`, which picks `gh` or `fgj`
-from the remote. `ccore pr ensure` rebases the branch onto the target before its first
-push; when that changes the head commit, verify again (step 5) and update the
-Verification section. Push later repair commits with a plain `git push`. Rerunning
-`ccore pr ensure` on an already published branch can rebase and force-push it; that is a
-history rewrite and needs the user's authorization for this branch. The body carries,
-besides the summary:
+Always open a pull request. Write its text with `cognovis-pr`, which reads the
+installed `pr` skill for the template and owns the sections a Cognovis delivery adds;
+do not restate those sections here. Hand it the `finding_triage.py --review-decisions`
+output from step 4, the verifier's verdict and verified head SHA from step 5, the work
+order reference, and the model route each of the three reviewers used.
 
-- a reference to the work order: `Closes #<n>` when the issue lives in the same
-  repository, the full issue URL otherwise,
-- a **Review decisions** section from step 4,
-- a **Verification** section with the verdict, the verified head SHA and every run path
-  with its outcome,
-- the model route each of the three reviewers used.
+Publish the result with `ccore pr ensure --repo <worktree> --summary <text>`, which
+picks `gh` or `fgj` from the remote. `ccore pr ensure` rebases the branch onto the
+target before its first push; when that changes the head commit, verify again (step 5)
+and update the Verification section. Push later repair commits with a plain `git push`.
+Rerunning `ccore pr ensure` on an already published branch can rebase and force-push it;
+that is a history rewrite and needs the user's authorization for this branch.
 
 pr-agent on Atlas reviews the pull request once, from `.agents/standards/review.md` and
 `AGENTS.md`, and does not re-raise findings listed under Review decisions. It sets
