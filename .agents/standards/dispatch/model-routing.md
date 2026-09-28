@@ -9,13 +9,14 @@ when the family matters; a host without it silently runs real Sonnet or Haiku.
 
 | Alias | Model | Family | Delivery steps |
 |---|---|---|---|
-| `opus` | Claude Opus 5.5 | Claude | main session, `implementer` subagent, one of the three reviewers (fresh context) |
+| `opus` | Claude Opus 5.5 | Claude | main session, `implementer` subagent, one of the three reviewers (fresh context) and, after triage, that reviewer as the designated repair author |
 | `fable` | Claude Fable 5.1 | Claude | planning |
 | `sonnet` | `gpt-6-astra` | GPT | one of the three reviewers; its findings go through triage because Astra is picky |
 | `haiku` | `grok-4.7` | Grok | one of the three reviewers; verification, including browser and UI verification with `playwright-cli` |
 
 `opus`, `sonnet` and `haiku` together cover three model families for the adversarial
-review.
+review. The repair role follows the actor, not a family: repairs go to the designated
+`opus` reviewer whichever family surfaced the finding.
 
 ## Dispatch rule
 

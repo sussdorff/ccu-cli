@@ -21,11 +21,14 @@ Steps and actors (models per the `dispatch/model-routing` standard):
 1. grilling - main session; only product or preference questions reach the human.
 2. implementation - `implementer` subagent with `tdd`; it owns source and tests.
 3. adversarial review - three read-only reviewers on `opus`, `sonnet` and `haiku`, same
-   brief, in parallel; the main session merges their findings.
-4. triage - `finding_triage.py`; one repair round by the implementer; the rest goes to
-   the pull request's Review decisions section.
-5. verification - a non-author agent runs the changed artifact and returns `PASS`,
-   `PASS+NOTES` or `FAIL` bound to the head commit.
+   brief, in parallel, on one fixed candidate; the `opus` reviewer is named the
+   designated repair author before dispatch; the main session merges their findings.
+4. triage - `finding_triage.py`; one repair round by the designated repair author, which
+   receives write authority only for the accepted set; the rest goes to the pull
+   request's Review decisions section.
+5. verification - an agent that authored neither the implementation nor any repair runs
+   the changed artifact and returns `PASS`, `PASS+NOTES` or `FAIL` bound to the head
+   commit.
 6. pull request - always; pr-agent reviews it once for standards and conventions and
    sets the `review-risk:*` label.
 7. merge decision - the main session, under the conditions in the executive-pack skill.
@@ -33,7 +36,13 @@ Steps and actors (models per the `dispatch/model-routing` standard):
 
 ## Boundaries
 
-- Reviewers and verifiers are read-only and never the author of the change.
+- Reviewers start read-only. Exactly one of them, the designated repair author, may be
+  granted write authority afterwards, bounded to the accepted repair set; the others and
+  the implementer do not write while it does.
+- The repair author is a coauthor from its first commit, so it can no longer verify or
+  approve that delivery. A verifier authored neither the implementation nor any repair.
+- Ambiguity or scope beyond the accepted set returns to the main session, never a
+  silent edit, and never a silent fall back to the implementer.
 - Tests alone are not verification; a green CI or a pr-agent approval is not the verdict.
 - A missing actor, a failed dispatch or an incomplete answer never counts as approval.
 - The PR label `review-risk:none` for the current head is the only risk signal an agent
