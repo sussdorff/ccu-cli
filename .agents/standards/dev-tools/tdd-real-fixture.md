@@ -1,6 +1,6 @@
 # TDD Real-Fixture Rule
 
-When a bead **parses production output** — HTML/CSV/JSON from external tools,
+When a work order **parses production output** — HTML/CSV/JSON from external tools,
 validator reports, ETL source data, API responses, generated build artifacts —
 a TDD suite built on self-written fixtures is **not enough**.
 
@@ -10,7 +10,7 @@ tests green against it — and the real format is different.
 
 ## Concrete Example (fpde-838, 2026-05-12)
 
-Bead: CI release gate for the IG Publisher's qa.html.
+Work order: CI release gate for the IG Publisher's qa.html.
 
 | Assumption in fixture | Real format | Consequence |
 |-----------------------|-------------|-------------|
@@ -18,11 +18,11 @@ Bead: CI release gate for the IG Publisher's qa.html.
 | Row has 3 cells (file, message, ctx) | Row has 4 cells with a severity column | Counter cells with `<b>N</b>` counted as errors |
 | Allowlist pattern "IG URL should refer" | Real message "The URL should refer" | Allowlist did not match, error treated as internal |
 
-Result: tests 15/15 green, the v0.60.0 release blocked itself, and a hotfix bead was needed.
+Result: tests 15/15 green, the v0.60.0 release blocked itself, and a hotfix work order was needed.
 
-## Mandatory for Parser/Gate/Adapter/ETL Beads
+## Mandatory for Parser/Gate/Adapter/ETL Work Orders
 
-Beads that parse external production output MUST:
+Work orders that parse external production output MUST:
 
 1. **Sample a real fixture** when implementation starts:
    ```bash
@@ -60,9 +60,9 @@ Beads that parse external production output MUST:
 
 ## Detection Triggers
 
-These bead contents point to a parser, gate, or adapter:
+These work order contents point to a parser, gate, or adapter:
 - ACs mention: parse, gate, qa.html, output/, .yml workflow, ETL, scrape, validator, adapter
-- Bead description mentions: HTML report, JSON API response, CSV import, build artifact
+- Work order description mentions: HTML report, JSON API response, CSV import, build artifact
 - Tool output is consumed: IG Publisher, SUSHI, npm registry, GitHub API
 
 When in doubt, use a real fixture rather than skipping it.
@@ -71,8 +71,8 @@ When in doubt, use a real fixture rather than skipping it.
 
 A real fixture is not needed when:
 - Pure refactor without a new parser
-- Documentation-only bead
-- The bead works exclusively against self-generated output structure (FSH to JSON
+- Documentation-only work order
+- The work order works exclusively against self-generated output structure (FSH to JSON
   via SUSHI is a grey area — SUSHI is external, but the output format is
   FHIR-specified and therefore stable)
 - The implementation uses an established library with a well-documented format
@@ -93,10 +93,10 @@ Format drift is guaranteed. The tests get trained on wrong assumptions.
 
 **Skipping with "CI will catch it":** "Tests are green, CI is the real test."
 
-Wrong — CI is production. When the bead is reported done and CI then crashes,
-a hotfix bead follows. Sampling a fixture is cheaper than a hotfix bead.
+Wrong — CI is production. When the work order is reported done and CI then crashes,
+a hotfix work order follows. Sampling a fixture is cheaper than a hotfix work order.
 
-## Validation at Bead Close
+## Validation at Close
 
 The verification agent should check:
 - Does a test exercise a fixture that actually came from production, rather than one
