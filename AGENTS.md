@@ -21,8 +21,8 @@ representative data are exceptions when the product requires them.
 
 ## Tracking and delivery
 
-Use `bd` for task tracking and `bd prime` for current commands. Do not create a
-second task list. The single assigned delivery owner runs
-`ccore session-close`; contributors do not independently close, sync, merge,
+Use `ccore tracker` for hosted issues with `owner/repo#N` references. Do not
+create a second task list. The single assigned delivery owner handles delivery;
+contributors do not independently close, sync, merge,
 clean up, or push unless explicitly assigned delivery ownership. Stage only
 files owned by the current assignment.
