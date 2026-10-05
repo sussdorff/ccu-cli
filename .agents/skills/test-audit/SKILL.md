@@ -1,6 +1,6 @@
 ---
 name: test-audit
-description: Audit one repository's existing test suite, and repair it on request.
+description: Audit test quality and resource cleanup in one repository, and repair on request.
 disable-model-invocation: true
 requires_standards: [workflow/test-quality]
 ---
@@ -46,7 +46,7 @@ Read `codebase-design` from the same root set when a finding turns on where a se
 belongs. If no root has `tdd`, stop and report a setup failure. A missing skill is
 not permission to invent a replacement testing policy.
 
-Then read the repository's own `AGENTS.md`, `CONTEXT.md` and standards. Domain, data
+Then read the repository's own `AGENTS.md`, `GLOSSARY.md` and standards. Domain, data
 provenance, credential and safety obligations recorded there survive this audit
 unchanged, and a textual contract can be one of them: in a repository whose product
 is instructions, a test over Markdown may be the only oracle for a real contract.
@@ -56,6 +56,11 @@ is instructions, a test over Markdown may be the only oracle for a real contract
 Name the target and the path set before reading tests. Then find the real entry
 points — the runner, its scripts, its configuration, which paths are unit and which
 need a service — and record them.
+
+Inventory resources created or started by the tests: temporary files and directories,
+compiled binaries, child processes, containers, test-built images, networks and
+volumes. Record their owner, teardown and what remains after a run; disk-backed
+temporary storage still needs cleanup.
 
 Before running anything, find out what that runner does to the tree: caches and
 coverage files it writes, snapshots it can rewrite under an update flag, database
@@ -89,6 +94,42 @@ Record each actionable finding with all five fields:
 | Plausible defect | The concrete defect that would make it fail, or why none exists |
 | Evidence | What you read, ran, mutated, or could not reach |
 | Proposed disposition | keep, repair, replace, remove, or unresolved |
+
+## Resource cleanup
+
+A test owns the lifecycle of the resources it creates. Missing or ineffective
+teardown is a **repair** finding even when its assertions protect useful behaviour.
+The fix belongs in the owning test, shared fixture or test harness; moving binaries
+from RAM to disk or changing the guest configuration leaves the leak unresolved.
+
+In audit mode, inspect teardown and report leaks without deleting resources. In
+repair mode, apply these requirements within the admitted path set:
+
+- Give each run isolated temporary paths and resource identities. Register cleanup
+  as soon as a resource is acquired, so partially failed setup is covered too.
+- Use runner teardown, fixture finalizers or `try/finally` so cleanup runs after
+  success, failed assertions and exceptions. A deletion after the last assertion
+  alone is insufficient. Await asynchronous cleanup before the test run ends.
+- Remove generated files, binaries and temporary directories after their last
+  consumer finishes. For Node-based tests, use `rmSync` on the exact owned path in
+  teardown or `finally`; use `{ recursive: true, force: true }` for an owned temporary
+  directory. Terminate and wait for owned child processes before removing their files.
+- Stop and remove test-created containers, then remove test-built images once their
+  consumers are gone, and remove test-created networks and disposable volumes. Track
+  exact IDs or unique run labels; preserve pre-existing images, shared caches,
+  developer services and persistent data. Global Docker prune and broad filesystem
+  deletion are not teardown.
+- Make teardown safe after partial setup and repeated calls. Attempt the remaining
+  cleanup steps if one fails, and report cleanup errors alongside the original test
+  failure. Retained failure artifacts need an explicit diagnostic option with bounded
+  retention and their paths reported; automatic cleanup is the default.
+
+Verify an affected passing run, a controlled assertion or setup failure, and a repeat
+run. Compare the owned paths and resource IDs before and after: no temporary binary,
+directory, process, container, test-built image, network or disposable volume may
+remain. Use disposable local fixtures for failure checks. A killed runner may bypass
+finalizers; when that interruption is in scope, give its launcher an owned-resource
+recovery path and verify it. If a path cannot be exercised, report it as unverified.
 
 ## Audit mode
 
@@ -155,3 +196,5 @@ Close with the target and path set, the entry points and baseline you observed, 
 findings in the table format above, and an explicit limitations section: what you did
 not read, could not run, and left unresolved. In repair mode, add the kept-versus-
 changed outcome for each finding and the checks you re-ran.
+Include the resource inventory, cleanup repairs, before/after residue and failure-path
+evidence; name any retained artifacts, cleanup errors or unverified teardown paths.

@@ -22,6 +22,18 @@ Line one of the file, at most 120 characters, naming the observable result rathe
 the activity. `Reduce the Praxis IG to two extensions and eight code systems` beats
 `Refactor IG`.
 
+## Cross-repository references
+
+Anywhere in the title or body, write an issue or pull request in another repository on
+the same host as the pull request as `owner/repo#N` (for example
+`cognovis/library-core#121` in a git.cognovis.de pull request) or as its full URL. When
+the target lives on another host, write its full URL: `owner/repo#N` links on the pull
+request's own host, so `cognovis/library-core#121` in a GitHub MIRA pull request links
+the GitHub repository of that name, not the Forgejo issue. Never write a bare `#N` or
+`<repo> #N` for another repository: Forgejo, GitHub and pr-agent link a bare `#N` to the
+current repository, so `library-core #121` in a MIRA pull request links MIRA issue #121.
+A bare `#N` is only for the same repository, as in `Closes #<n>`.
+
 ## Sections Cognovis adds
 
 Append these after the sections the `pr` skill defines. This is the single list of
@@ -51,6 +63,55 @@ verdict here.
 The model route each of the delivery's three reviewers actually used, as reported by
 the delivery. Record a fallback route as the route; do not present an alias that was
 unavailable.
+
+### Merge assessment
+
+Two lines supplied by `executive-pack` for the current head, each with a one-sentence
+reason:
+
+```text
+Product decision: none deviating from <work order or user authorization> - <reason>
+Economic damage: none expected - <reason>
+```
+
+Name the deviation or the expected damage instead when one exists. `executive-pack`
+owns both assessments and the merge decision; this section only records them.
+
+### Risk statement
+
+Required when the review risk is not `none`, whether the work order's `Review-Risk:`
+line or pr-agent's `review-risk:*` label set it. When pr-agent raises the class after
+publication, add the section then. Each field must be checkable against the diff:
+
+```text
+Data class: <affected data: patient data, staff data, credentials, terminology/catalogues ...>
+Boundary: <who can read, write or export what, before> -> <after>
+Crossing: <for pii: the crossing cited from .agents/standards/pii-boundary.md, or the assumed boundary when the repository has none>
+Scenario: <how damage would concretely occur, and what must already have gone wrong>
+Reach: <dev stack or synthetic data only | customer instance with real personal data>
+Reversal: <revertible, and how | what has already left the system>
+Evidence: <the test or live check that proves the new boundary>
+```
+
+Omit `Crossing` for a class other than `pii`. When no concrete scenario can be named,
+write `Scenario: none nameable - <reason>`: the classification is wrong and should be
+`none`. The validity rules, the PII crossing types and what counts as economic damage
+are in the `executive-pack` standard's Review risk section; do not restate them here.
+
+Example, a blanket read-only terminology operation for workforce users of their own
+tenant, labelled `auth`:
+
+```text
+Data class: terminology and catalogues; no personal data
+Boundary: workforce users of a tenant cannot run the operation -> they can run it read-only on their own tenant
+Scenario: none nameable - terminology holds no personal data and no new user group gains access
+Reach: every instance, terminology content only
+Reversal: revertible by restoring the previous pin
+Evidence: the test that a workforce user of another tenant is still refused
+```
+
+The change touches auth but moves no data boundary, so the class should be `none` and
+does not hold the merge.
 
 ### Known residuals
 

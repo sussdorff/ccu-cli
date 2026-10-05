@@ -18,8 +18,9 @@ review channel is operated by `forgejo-review-channel`, not here.
 - Verified evidence: commands run with verdicts, screenshots for a user-visible
   surface, and known residuals.
 - From the delivery: the `finding_triage.py --review-decisions` output, the
-  non-author verifier's verdict with the head SHA it verified, and the model route
-  each reviewer used.
+  non-author verifier's verdict with the head SHA it verified, the model route
+  each reviewer used, the product decision and economic damage assessments, and the
+  Risk statement content when the review risk is not `none`.
 
 ## Outputs
 
@@ -31,12 +32,13 @@ review channel is operated by `forgejo-review-channel`, not here.
 
 1. Read the installed `pr` skill, project-local before global, and use its live
    template for the body. `references/authoring.md` resolves it and holds only
-   what Cognovis adds. Harness bootstrap installs `pr`; the Library does not ship
+   what Cognovis adds. `pr` is installed globally on each host by `harness bootstrap`; the Library does not ship
    it, and a missing one is a setup failure to report.
 2. Write the body from that template, then add the Cognovis sections defined in
    `references/authoring.md`: the work-order reference, Review decisions,
-   Verification, reviewer routes and Known residuals. That reference is the only
-   place this list is held; a caller supplies the content, not a second list.
+   Verification, reviewer routes, Merge assessment, Risk statement and Known residuals.
+   That reference is the only place this list is held; a caller supplies the content,
+   not a second list.
 3. Attach walkthrough evidence only when a user-visible surface changed, after the
    pull request exists, per the reference.
 4. Pass the file to `ccore pr ensure` as its `--summary` value. Do not add the

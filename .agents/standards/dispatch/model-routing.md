@@ -31,6 +31,11 @@ is unavailable, or when the native attempt fails:
 | `haiku` (review, non-UI verification) | `grok-4.7` on `grok` |
 | `haiku` (UI verification) | `gpt-6-luna` on `codex` |
 
+A native subagent works in the invoking session's worktree and cannot leave it. When the
+candidate lives in another worktree, for example a retro pull request in a self-managed
+worktree while the session runs in a T3 thread worktree, dispatch the fallback route
+directly with `--cwd <worktree>`; `ccore agent run` also requires `--events-file`.
+
 The catalog is `ccore agent models --json`. A configured catalog entry is not proof that
 the route is reachable right now. When neither the alias nor the fallback route works,
 stop and report the dispatch diagnostic; never substitute another model silently and
