@@ -41,6 +41,21 @@ uv run pytest tests/test_cli.py
 uv run pytest -k "test_devices"
 ```
 
+Toolchain declarations (setup actions, `requires-python`) follow the vendored
+toolchains standard. CI's `toolchains` job runs the check on every push to
+`main` and every pull request; that is the check that always runs. A pre-push
+run happens only on hosts whose global pre-push hook calls
+`scripts/dev/preflight.sh`; the repository ships no hook of its own.
+`tests/test_toolchains.py` runs the check offline with uv's latest version
+overridden above any real release, so it fails on any declaration that is not
+`ok`, including every explicit uv version pin; Python lookups are not
+overridden. Run it manually with:
+
+```bash
+python3 .agents/standards/toolchains/scripts/check_toolchain_versions.py
+bash scripts/dev/preflight.sh
+```
+
 ## Python CLI conventions
 
 This is a user-invoked Python CLI. Keep the `src/` layout. Configuration resolves
