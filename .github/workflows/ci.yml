@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
 
+env:
+  # pydantic-core has no wheel for the newest interpreter on the runner; keep
+  # CI on the Python the project targets.
+  UV_PYTHON: "3.14"
+
 permissions:
   contents: read
 
