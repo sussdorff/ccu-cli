@@ -41,8 +41,10 @@ uv run pytest tests/test_cli.py
 uv run pytest -k "test_devices"
 ```
 
-Toolchain declarations (setup actions, `requires-python`) follow the vendored
-toolchains standard. CI's `toolchains` job runs the check on every push to
+Toolchain declarations (setup actions, `requires-python`) name the latest
+release of each toolchain; `scripts/dev/check_toolchain_versions.py`, a copy of
+the Library checker kept here because CI runners have no `ccore`, enforces
+that. CI's `toolchains` job runs the check on every push to
 `main` and every pull request; that is the check that always runs. A pre-push
 run happens only on hosts whose global pre-push hook calls
 `scripts/dev/preflight.sh`; the repository ships no hook of its own.
@@ -52,7 +54,7 @@ overridden above any real release, so it fails on any declaration that is not
 overridden. Run it manually with:
 
 ```bash
-python3 .agents/standards/toolchains/scripts/check_toolchain_versions.py
+python3 scripts/dev/check_toolchain_versions.py
 bash scripts/dev/preflight.sh
 ```
 

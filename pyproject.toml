@@ -52,7 +52,7 @@ testpaths = ["tests"]
 addopts = "-n auto"
 
 [tool.ruff]
-extend-exclude = [".agents", ".claude"]
+extend-exclude = ["scripts/dev/check_toolchain_versions.py"]
 
 [build-system]
 requires = ["hatchling"]

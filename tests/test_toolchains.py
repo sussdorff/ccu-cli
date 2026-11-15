@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CHECKER = REPO_ROOT / ".agents/standards/toolchains/scripts/check_toolchain_versions.py"
+CHECKER = REPO_ROOT / "scripts/dev/check_toolchain_versions.py"
 
 
 def test_every_toolchain_declaration_follows_the_standard():
